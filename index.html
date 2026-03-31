@@ -524,18 +524,15 @@ bind('btnAutoLoad', function() {
       return res.arrayBuffer();
     })
     .then(function(buffer) {
-      // Shift-JIS / UTF-8 自動判別
-      var decoder;
+      // まずShift-JISで試す、ダメならUTF-8
+      var text;
       try {
-        decoder = new TextDecoder('shift-jis');
-        var text = decoder.decode(buffer);
+        text = new TextDecoder('shift-jis').decode(buffer);
         if (text.indexOf('�') !== -1) {
-          decoder = new TextDecoder('utf-8');
-          text = decoder.decode(buffer);
+          text = new TextDecoder('utf-8').decode(buffer);
         }
       } catch(e) {
-        decoder = new TextDecoder('utf-8');
-        text = decoder.decode(buffer);
+        text = new TextDecoder('utf-8').decode(buffer);
       }
       db = parseCSV(text);
       if (Object.keys(db).length === 0) {
