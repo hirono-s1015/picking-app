@@ -245,8 +245,10 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
   <div id="pageSetup" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;">
     <div class="page-title">データを読み込む</div>
     <p class="page-desc">
-      ネクストエンジンから <code>送り状番号,商品コード</code> 形式のCSVをダウンロードし、下のボタンで読み込んでください。ヘッダー行は自動でスキップします。
+      GitHubに <code>data.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
     </p>
+    <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">今日のデータを読み込む ▶</a>
+    <div class="divider">または 手動でCSVを読み込む</div>
 
     <!-- ファイル読み込み -->
     <label class="file-area">
@@ -509,6 +511,44 @@ function bind(id, fn) {
 }
 
 // ===== START =====
+// ===== AUTO LOAD FROM GITHUB =====
+var CSV_URL = 'https://hirono-s1015.github.io/picking-app/data.csv';
+
+bind('btnAutoLoad', function() {
+  document.getElementById('btnAutoLoad').textContent = '読み込み中...';
+  fetch(CSV_URL + '?t=' + Date.now())
+    .then(function(res) {
+      if (!res.ok) throw new Error('ファイルが見つかりません');
+      return res.arrayBuffer();
+    })
+    .then(function(buffer) {
+      // Shift-JIS / UTF-8 自動判別
+      var decoder;
+      try {
+        decoder = new TextDecoder('shift-jis');
+        var text = decoder.decode(buffer);
+        if (text.indexOf('�') !== -1) {
+          decoder = new TextDecoder('utf-8');
+          text = decoder.decode(buffer);
+        }
+      } catch(e) {
+        decoder = new TextDecoder('utf-8');
+        text = decoder.decode(buffer);
+      }
+      db = parseCSV(text);
+      if (Object.keys(db).length === 0) {
+        toast('有効なデータがありません');
+        document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+        return;
+      }
+      startScan();
+    })
+    .catch(function(err) {
+      toast('data.csvが見つかりません。GitHubにアップロードしてください。');
+      document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+    });
+});
+
 // ===== QR GENERATE =====
 function showPage(id) {
   ['pageSetup','pageQR','pageScan'].forEach(function(p) {
