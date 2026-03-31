@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>検品アプリ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root {
+  --bg: #2d2d2d;
+  --ok: #00b894;
+  --ng: #e94560;
+  --wait: #f39c12;
+  --text: #eaeaea;
+  --muted: #8892a4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.3s;
+}
+body.ok   { background: #2d2d2d; }
+body.ng   { background: #2d2d2d; }
+body.wait { background: #2d2d2d; }
+
+/* ===== HEADER ===== */
+header {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+.logo { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--muted); }
+.counters { display: none; gap: 16px; font-size: 12px; color: var(--muted); }
+.counters.show { display: flex; }
+.counters b { font-size: 15px; font-weight: 700; color: var(--text); }
+
+/* ===== MAIN ===== */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  gap: 16px;
+}
+
+/* ===== SETUP ===== */
+#pageSetup { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+.page-title { font-size: 20px; font-weight: 700; }
+.page-desc  { font-size: 13px; color: var(--muted); line-height: 1.8; }
+.page-desc code {
+  background: rgba(255,255,255,0.1);
+  padding: 2px 7px; border-radius: 4px; font-size: 11px;
+}
+
+/* ===== FILE UPLOAD ===== */
+.file-area {
+  border: 2px dashed rgba(255,255,255,0.2);
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(255,255,255,0.03);
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+.file-area:active { border-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.07); }
+.file-area input[type=file] {
+  position: absolute; inset: 0;
+  opacity: 0; width: 100%; height: 100%; cursor: pointer;
+}
+.file-icon { font-size: 32px; margin-bottom: 10px; display: block; }
+.file-area p { font-size: 14px; color: var(--muted); }
+.file-name { font-size: 13px; color: var(--ok); margin-top: 6px; min-height: 18px; }
+
+/* ===== TEXTAREA ===== */
+.divider { text-align: center; font-size: 12px; color: var(--muted); }
+textarea {
+  width: 100%; height: 110px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  color: var(--text); font-size: 13px;
+  padding: 12px 14px; font-family: monospace;
+  resize: none; outline: none; line-height: 1.6;
+}
+textarea:focus { border-color: rgba(255,255,255,0.4); }
+
+/* ===== BUTTONS ===== */
+.btn-main {
+  display: block; width: 100%;
+  background: var(--text); color: #1a1a2e;
+  border: none; border-radius: 14px;
+  font-size: 17px; font-weight: 700;
+  padding: 18px; text-align: center;
+  cursor: pointer; font-family: sans-serif;
+  text-decoration: none;
+  -webkit-appearance: none;
+}
+.btn-main:active { opacity: 0.8; }
+.btn-secondary {
+  display: block; width: 100%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text); border-radius: 14px;
+  font-size: 15px; font-weight: 700;
+  padding: 15px; text-align: center;
+  cursor: pointer; text-decoration: none;
+  font-family: sans-serif;
+  -webkit-appearance: none;
+}
+.btn-secondary:active { opacity: 0.7; }
+
+.btn-sub {
+  display: block; width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--muted);
+  border-radius: 50px;
+  font-size: 13px; padding: 11px;
+  text-align: center; cursor: pointer;
+  font-family: sans-serif;
+  text-decoration: none;
+  -webkit-appearance: none;
+}
+.btn-sub:active { background: rgba(255,255,255,0.12); }
+
+.btn-clear {
+  display: none; width: 100%; max-width: 480px;
+  background: var(--ng); color: #fff;
+  border: none; border-radius: 50px;
+  font-size: 18px; font-weight: 700;
+  padding: 17px; text-align: center;
+  cursor: pointer; font-family: sans-serif;
+  text-decoration: none;
+  -webkit-appearance: none;
+  box-shadow: 0 0 28px rgba(233,69,96,0.5);
+}
+.btn-clear.show { display: block; }
+.btn-clear:active { opacity: 0.8; }
+
+/* ===== STATUS CARD ===== */
+.status-card {
+  width: 100%; max-width: 480px;
+  background: #2d2d2d;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 22px; padding: 32px 24px;
+  text-align: center; transition: all 0.3s;
+}
+body.ok   .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
+body.ng   .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
+body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
+.s-icon { font-size: 54px; line-height: 1; margin-bottom: 14px; display: block; }
+.s-text { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+.s-sub  { font-size: 13px; color: var(--muted); }
+
+/* ===== TARGET BOX ===== */
+.target-box {
+  width: 100%; max-width: 480px;
+  background: #000000;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 16px; padding: 18px 20px;
+  text-align: center;
+  flex-direction: column; align-items: center; gap: 6px;
+  display: none;
+}
+.target-box.show { display: flex; }
+.t-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 2px; }
+.t-row   { width: 100%; text-align: center; }
+.t-name  { font-size: 22px; font-weight: 700; color: var(--text); }
+.t-loc   { font-size: 30px; font-weight: 700; color: #ffffff; letter-spacing: 0.05em; }
+.t-code  { font-size: 24px; font-weight: 700; color: #ffffff; word-break: break-all; }
+.t-divider { width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0; }
+.t-jan   { font-size: 20px; font-weight: 700; color: #a29bfe; letter-spacing: 0.05em; }
+.t-sub   { font-size: 16px; font-weight: 600; color: var(--muted); word-break: break-all; }
+.t-pname { font-size: 24px; font-weight: 700; color: #ffffff; line-height: 1.4; margin-bottom: 4px; word-break: break-all; text-align: left; }
+
+/* ===== PROGRESS ===== */
+.prog-wrap { width: 100%; max-width: 480px; }
+.prog-bg   { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--ok); border-radius: 2px; width: 0%; transition: width 0.4s; }
+
+/* ===== SCAN INPUT ===== */
+.scan-wrap { width: 100%; max-width: 480px; position: relative; }
+.scan-input {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 14px; color: var(--text);
+  font-size: 17px; padding: 17px 50px 17px 18px;
+  outline: none; font-family: sans-serif;
+  -webkit-appearance: none;
+}
+.scan-input:focus { border-color: rgba(255,255,255,0.4); }
+.scan-input::placeholder { color: var(--muted); font-size: 13px; }
+.scan-icon { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 20px; pointer-events: none; }
+
+/* ===== LOG ===== */
+.log-wrap { width: 100%; max-width: 480px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.log-item { font-size: 12px; padding: 7px 11px; border-radius: 9px; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.04); color: var(--muted); }
+.badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 50px; flex-shrink: 0; }
+.ok-log .badge { background: rgba(0,184,148,0.2); color: var(--ok); }
+.ng-log .badge { background: rgba(233,69,96,0.2); color: var(--ng); }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: rgba(20,20,40,0.95);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 11px 22px; border-radius: 50px;
+  font-size: 14px; font-weight: 600;
+  transition: transform 0.3s; z-index: 100;
+  white-space: nowrap; pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">検品アプリ</div>
+  <div class="counters" id="counters">
+    <span>完了 <b id="cntOk">0</b></span>
+    <span>NG <b id="cntNg">0</b></span>
+    <span>残 <b id="cntLeft">0</b></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===== SETUP PAGE ===== -->
+  <div id="pageSetup" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;">
+    <div class="page-title">データを読み込む</div>
+    <p class="page-desc">
+      GitHubに <code>ZAC.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
+    </p>
+    <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">今日のデータを読み込む ▶</a>
+    <div class="divider">または 手動でCSVを読み込む</div>
+
+    <!-- ファイル読み込み -->
+    <label class="file-area">
+      <input type="file" id="fileInput" accept=".csv,.txt">
+      <span class="file-icon">📂</span>
+      <p>ここをタップしてCSVファイルを選択</p>
+      <div class="file-name" id="fileName"></div>
+    </label>
+
+    <div class="divider">または テキストを直接貼り付け</div>
+
+    <textarea id="csvData" placeholder="1234567890,SHOE-M-BLK&#10;0987654321,SHOE-L-WHT&#10;..."></textarea>
+
+    <a class="btn-main" id="btnGenQR" href="javascript:void(0)">QRコードを生成する →</a>
+    <a class="btn-secondary" id="btnStart" href="javascript:void(0)">このままスキャン開始</a>
+  </div>
+
+  <!-- ===== QR PAGE ===== -->
+  <div id="pageQR" style="display:none;width:100%;max-width:480px;flex-direction:column;gap:16px;text-align:center;">
+    <div class="page-title">QRコードが生成されました</div>
+    <p class="page-desc">印刷またはLINE・メールで送ってください。<br>スマホで読み取るとアプリが即起動します。</p>
+    <div id="qrBox" style="background:#fff;border-radius:16px;padding:20px;display:flex;align-items:center;justify-content:center;margin:0 auto;"></div>
+    <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--muted);word-break:break-all;text-align:left;line-height:1.6;">
+      <b style="color:var(--text);display:block;margin-bottom:4px;font-size:12px;">生成されたURL</b>
+      <span id="qrUrlText"></span>
+    </div>
+    <a class="btn-main" id="btnPrint" href="javascript:void(0)">印刷する</a>
+    <a class="btn-secondary" id="btnBackToSetup" href="javascript:void(0)">← データを変更する</a>
+  </div>
+
+  <!-- ===== SCAN PAGE ===== -->
+  <div id="pageScan" style="display:none;width:100%;max-width:480px;flex-direction:column;align-items:center;gap:16px;">
+
+    <div class="status-card">
+      <span class="s-icon" id="sIcon">📦</span>
+      <div class="s-text" id="sText">送り状をスキャン</div>
+      <div class="s-sub"  id="sSub">バーコードスキャナで読み取ってください</div>
+    </div>
+
+    <div class="target-box" id="targetBox">
+      <div class="t-row">
+        <div class="t-label">送り先</div>
+        <div class="t-name" id="targetName">—</div>
+      </div>
+      <div class="t-divider"></div>
+      <div class="t-row">
+        <div class="t-label">ロケ</div>
+        <div class="t-loc" id="targetLoc">—</div>
+      </div>
+      <div class="t-divider"></div>
+      <!-- JANあり：商品コードを大きく表示、JANは参考表示 -->
+      <div id="targetJanWrap" style="display:none;">
+        <div class="t-row">
+          <div class="t-label">商品名</div>
+          <div class="t-pname" id="targetPnameSub">—</div>
+        </div>
+        <div class="t-row">
+          <div class="t-label">商品コード</div>
+          <div class="t-code" id="targetCodeSub">—</div>
+        </div>
+        <div class="t-divider"></div>
+        <div class="t-row">
+          <div class="t-label">スキャン ▶ JANコード</div>
+          <div class="t-sub" id="targetJan">—</div>
+        </div>
+      </div>
+      <!-- JANなし：商品コードを大きく表示 -->
+      <div id="targetCodeWrap">
+        <div class="t-row">
+          <div class="t-label">商品名</div>
+          <div class="t-pname" id="targetPname">—</div>
+        </div>
+        <div class="t-row">
+          <div class="t-label">スキャン ▶ 商品コード</div>
+          <div class="t-code" id="targetCode">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prog-wrap">
+      <div class="prog-bg"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+
+    <div class="scan-wrap">
+      <input type="text" class="scan-input" id="scanInput"
+        placeholder="ここをスキャン / 入力してEnter"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <span class="scan-icon">⌨️</span>
+    </div>
+
+    <a class="btn-clear" id="btnClear" href="javascript:void(0)">✕ クリア</a>
+
+    <div class="log-wrap" id="logWrap"></div>
+
+    <a class="btn-sub" id="btnBack" href="javascript:void(0)">← データを変更する</a>
+
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== AUDIO (音声読み上げ) =====
+var locSpeechTimer = null;
+
+function speak(msg, onEnd) {
+  try {
+    if (!window.speechSynthesis) { if (onEnd) onEnd(); return; }
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(msg);
+    u.lang = 'ja-JP';
+    u.rate = 1.15;
+    u.pitch = 1.8;
+    u.volume = 1.0;
+    if (onEnd) u.onend = onEnd;
+    window.speechSynthesis.speak(u);
+  } catch(e) { if (onEnd) onEnd(); }
+}
+
+// ロケをパーツごとに1秒間隔で読み上げる
+// 例: P-01-12-01-02 → 「ピー」(1秒)「ゼロイチ」(1秒)「イチニ」...
+function locToSpeechText(loc) {
+  var numMap = {'0':'ゼロ','1':'イチ','2':'ニ','3':'サン','4':'ヨン',
+                '5':'ゴ','6':'ロク','7':'ナナ','8':'ハチ','9':'キュウ'};
+  var parts = loc.split('-');
+  var words = parts.map(function(part) {
+    if (part === 'P') return 'ピー';
+    return part.split('').map(function(c) {
+      return numMap[c] || c;
+    }).join('');
+  });
+  // 読点でつなげて1文として読ませる
+  return words.join('、');
+}
+
+// 1つのUtteranceで読み上げ、終わったらループ
+function startLocSpeech(loc) {
+  stopLocSpeech();
+  var msg = locToSpeechText(loc);
+
+  function loop() {
+    if (!curItem) return;
+    var u = new SpeechSynthesisUtterance(msg);
+    u.lang = 'ja-JP';
+    u.rate = 1.7;
+    u.pitch = 1.4;
+    u.volume = 1.0;
+    u.onend = function() {
+      if (!curItem) return;
+      locSpeechTimer = setTimeout(loop, 300);
+    };
+    window.speechSynthesis.speak(u);
+  }
+
+  loop();
+}
+
+function stopLocSpeech() {
+  clearTimeout(locSpeechTimer);
+  locSpeechTimer = null;
+  try { window.speechSynthesis.cancel(); } catch(e) {}
+}
+
+function beep(type) {
+  stopLocSpeech();
+  if (type === 'ok')    speak('正解です。');
+  else if (type === 'ng')    speak('商品が違います。');
+  else if (type === 'error') speak('伝票番号が見つかりません');
+}
+
+// 商品名を25文字でスペース位置に改行
+function formatPname(pname) {
+  if (!pname || pname.length <= 25) return pname || '';
+  var words = pname.split(' ');
+  var lines = [], current = '';
+  words.forEach(function(word) {
+    if (current.length === 0) {
+      current = word;
+    } else if ((current + ' ' + word).length <= 25) {
+      current += ' ' + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  });
+  if (current) lines.push(current);
+  return lines.join('<br>');
+}
+function vib(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
+
+// ===== TOAST =====
+var toastTmr;
+function toast(msg, dur) {
+  clearTimeout(toastTmr);
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  toastTmr = setTimeout(function(){ el.classList.remove('show'); }, dur||2000);
+}
+
+// ===== STATE =====
+var db={}, curItem=null, total=0, cOk=0, cNg=0, done=new Set(), isErr=false;
+
+// ===== CSV PARSE =====
+function parseCSV(text) {
+  var d = {};
+  text.split(/\r?\n/).forEach(function(line) {
+    // カンマ・読点・タブのいずれでも対応
+    var sep = line.indexOf(',') !== -1 ? ',' : line.indexOf('\t') !== -1 ? '\t' : '、';
+    var p = line.split(sep);
+    // 列構成: 伝票番号,送り先名,商品コード,受注数,商品名,ロケ,発送伝票番号,JAN
+    if (p.length >= 7) {
+      var slip = p[6].trim(); // 発送伝票番号
+      var name = p[1].trim(); // 送り先名
+      var code = p[2].trim(); // 商品コード
+      var loc  = p[5].trim(); // ロケ
+      var jan  = p.length >= 8 ? p[7].trim() : ''; // JAN（あれば）
+      // 発送伝票番号が数字のみの行だけ読み込む（ヘッダー行を自動スキップ）
+      var pname = p[4].trim(); // 商品名
+      if (slip && /^\d+$/.test(slip)) {
+        d[slip] = { name: name, code: code, loc: loc, jan: jan, pname: pname };
+      }
+    }
+  });
+  return d;
+}
+
+// ===== FILE INPUT =====
+document.getElementById('fileInput').addEventListener('change', function() {
+  var file = this.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('csvData').value = e.target.result;
+    document.getElementById('fileName').textContent = '✓ ' + file.name;
+  };
+  // Shift-JIS / UTF-8 両対応
+  var sjisReader = new FileReader();
+  sjisReader.onload = function(e2) {
+    var sjisText = e2.target.result;
+    // 文字化けチェック：UTF-8で読んで化けていたらShift-JISで再読込
+    if (sjisText.indexOf('\ufffd') !== -1 || sjisText.indexOf('\x00') !== -1) {
+      var sjisReader2 = new FileReader();
+      sjisReader2.onload = function(e3) {
+        document.getElementById('csvData').value = e3.target.result;
+        document.getElementById('fileName').textContent = '✓ ' + file.name;
+      };
+      sjisReader2.readAsText(file, 'Shift-JIS');
+    } else {
+      document.getElementById('csvData').value = sjisText;
+      document.getElementById('fileName').textContent = '✓ ' + file.name;
+    }
+  };
+  sjisReader.readAsText(file, 'UTF-8');
+});
+
+// ===== BIND BUTTON =====
+function bind(id, fn) {
+  var el = document.getElementById(id);
+  el.onclick = function(e) { e.preventDefault(); fn(); return false; };
+  el.addEventListener('touchend', function(e) { e.preventDefault(); fn(); return false; });
+}
+
+// ===== START =====
+// ===== AUTO LOAD FROM GITHUB =====
+var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
+
+bind('btnAutoLoad', function() {
+  document.getElementById('btnAutoLoad').textContent = '読み込み中...';
+  fetch(CSV_URL + '?t=' + Date.now())
+    .then(function(res) {
+      if (!res.ok) throw new Error('ファイルが見つかりません');
+      return res.arrayBuffer();
+    })
+    .then(function(buffer) {
+      // まずShift-JISで試す、ダメならUTF-8
+      var text;
+      try {
+        text = new TextDecoder('shift-jis').decode(buffer);
+        if (text.indexOf('�') !== -1) {
+          text = new TextDecoder('utf-8').decode(buffer);
+        }
+      } catch(e) {
+        text = new TextDecoder('utf-8').decode(buffer);
+      }
+      db = parseCSV(text);
+      if (Object.keys(db).length === 0) {
+        toast('有効なデータがありません');
+        document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+        return;
+      }
+      startScan();
+    })
+    .catch(function(err) {
+      toast('ZAC.csvが見つかりません。GitHubにアップロードしてください。');
+      document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+    });
+});
+
+// ===== QR GENERATE =====
+function showPage(id) {
+  ['pageSetup','pageQR','pageScan'].forEach(function(p) {
+    var el = document.getElementById(p);
+    if (el) el.style.display = 'none';
+  });
+  var target = document.getElementById(id);
+  if (target) target.style.display = 'flex';
+}
+
+bind('btnGenQR', function() {
+  var text = document.getElementById('csvData').value.trim();
+  if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
+  var d = parseCSV(text);
+  if (Object.keys(d).length === 0) { toast('有効なデータがありません'); return; }
+
+  // URLにデータを埋め込む
+  var encoded = Object.keys(d).map(function(k) {
+    var v = d[k];
+    return encodeURIComponent(k) + ':' + encodeURIComponent(v.name) + ':' + encodeURIComponent(v.code) + ':' + encodeURIComponent(v.loc) + ':' + encodeURIComponent(v.jan||'') + ':' + encodeURIComponent(v.pname||'');
+  }).join('|');
+  var base = location.href.split('?')[0].split('#')[0];
+  var url = base + '?d=' + encoded;
+
+  document.getElementById('qrBox').innerHTML = '';
+  try {
+    new QRCode(document.getElementById('qrBox'), {
+      text: url, width: 220, height: 220,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(err) { toast('QR生成に失敗しました（データが多すぎる可能性があります）'); return; }
+
+  document.getElementById('qrUrlText').textContent = url;
+  showPage('pageQR');
+});
+
+bind('btnPrint', function() { window.print(); });
+bind('btnBackToSetup', function() { showPage('pageSetup'); });
+
+// URLからデータ自動読み込み
+function loadFromURL() {
+  var m = location.search.match(/[?&]d=([^&]+)/);
+  if (!m) return false;
+  try {
+    db = {};
+    m[1].split('|').forEach(function(pair) {
+      var parts = pair.split(':');
+      if (parts.length < 3) return;
+      var slip  = decodeURIComponent(parts[0]);
+      var name  = decodeURIComponent(parts[1]);
+      var code  = decodeURIComponent(parts[2]);
+      var loc   = parts[3] ? decodeURIComponent(parts[3]) : '';
+      var jan   = parts[4] ? decodeURIComponent(parts[4]) : '';
+      var pname = parts[5] ? decodeURIComponent(parts[5]) : '';
+      if (slip && /^\d+$/.test(slip)) db[slip] = { name:name, code:code, loc:loc, jan:jan, pname:pname };
+    });
+    return Object.keys(db).length > 0;
+  } catch(e) { return false; }
+}
+
+bind('btnStart', function() {
+  var text = document.getElementById('csvData').value.trim();
+  if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
+  db = parseCSV(text);
+  total = Object.keys(db).length;
+  if (total === 0) { toast('有効なデータがありません。ヘッダー行のみの場合は送り状番号が数字か確認してください'); return; }
+  cOk=0; cNg=0; done=new Set(); curItem=null; isErr=false;
+  document.getElementById('logWrap').innerHTML = '';
+  updateCounters();
+  document.getElementById('counters').classList.add('show');
+  setStatus('ready');
+  document.getElementById('pageSetup').style.display = 'none';
+  document.getElementById('pageScan').style.display  = 'flex';
+  toast(total + '件 読み込みました');
+  setTimeout(function(){ document.getElementById('scanInput').focus(); }, 400);
+});
+
+// ===== BACK =====
+bind('btnBack', function() {
+  db={}; curItem=null; isErr=false;
+  document.getElementById('logWrap').innerHTML = '';
+  document.getElementById('counters').classList.remove('show');
+  document.body.className = '';
+  setClear(false);
+  document.getElementById('pageScan').style.display  = 'none';
+  document.getElementById('pageSetup').style.display = 'flex';
+});
+
+// ===== CLEAR =====
+bind('btnClear', function() {
+  stopLocSpeech();
+  isErr=false; curItem=null; setClear(false);
+  setStatus('ready'); document.body.className='';
+  setTimeout(function(){ document.getElementById('scanInput').focus(); }, 50);
+});
+
+// ===== COUNTERS =====
+function updateCounters() {
+  document.getElementById('cntOk').textContent   = cOk;
+  document.getElementById('cntNg').textContent   = cNg;
+  document.getElementById('cntLeft').textContent = total - done.size;
+  document.getElementById('progFill').style.width = (total>0 ? done.size/total*100 : 0) + '%';
+}
+
+// ===== STATUS =====
+function setStatus(state, msg, sub) {
+  document.body.className = {ok:'ok', ng:'ng', error:'ng', wait:'wait'}[state]||'';
+  document.getElementById('sIcon').textContent = {ready:'📦',wait:'🔍',ok:'✅',ng:'❌',error:'⚠️'}[state]||'📦';
+  document.getElementById('sText').textContent = {
+    ready:'送り状をスキャン', wait:'商品を探してスキャン',
+    ok:'OK！ 正解です', ng:msg||'NG！ 違います', error:msg||'エラー'
+  }[state]||'';
+  document.getElementById('sSub').textContent = {
+    ready:'バーコードスキャナで読み取ってください',
+    wait:'棚から該当商品のバーコードをスキャン',
+    ok:'次の送り状をスキャンしてください',
+    ng:sub||'', error:sub||''
+  }[state]||'';
+  var tb = document.getElementById('targetBox');
+  if (state==='wait'||state==='ng') tb.classList.add('show'); else tb.classList.remove('show');
+}
+
+function setClear(show) {
+  var b = document.getElementById('btnClear');
+  if (show) b.classList.add('show'); else b.classList.remove('show');
+}
+
+// ===== LOG =====
+function addLog(type, text) {
+  var w=document.getElementById('logWrap'), d=document.createElement('div');
+  d.className='log-item '+(type==='ok'?'ok-log':'ng-log');
+  var b=document.createElement('span'); b.className='badge';
+  b.textContent=type==='ok'?'OK':'NG';
+  d.appendChild(b); d.appendChild(document.createTextNode(text));
+  w.insertBefore(d, w.firstChild);
+  if (w.children.length>20) w.removeChild(w.lastChild);
+}
+
+// ===== SCAN LOGIC =====
+function processScan(val) {
+  if (!val) return;
+  isErr=false; setClear(false);
+  if (!curItem) {
+    // 発送伝票番号スキャン
+    if (db[val]) {
+      curItem = db[val]; // { name, code, loc, jan }
+      document.getElementById('targetName').textContent = curItem.name;
+      document.getElementById('targetLoc').textContent  = curItem.loc;
+      var hasJan = curItem.jan && /^\d+$/.test(curItem.jan);
+      // 商品名を25文字でスペース改行
+      var pnameFormatted = formatPname(curItem.pname);
+      if (hasJan) {
+        document.getElementById('targetJan').textContent      = curItem.jan;
+        document.getElementById('targetCodeSub').textContent  = curItem.code;
+        document.getElementById('targetPnameSub').innerHTML   = pnameFormatted;
+        document.getElementById('targetJanWrap').style.display  = 'block';
+        document.getElementById('targetCodeWrap').style.display = 'none';
+      } else {
+        document.getElementById('targetCode').textContent      = curItem.code;
+        document.getElementById('targetPname').innerHTML       = pnameFormatted;
+        document.getElementById('targetJanWrap').style.display  = 'none';
+        document.getElementById('targetCodeWrap').style.display = 'block';
+      }
+      setStatus('wait'); vib(50);
+      startLocSpeech(curItem.loc);
+    } else {
+      setStatus('error','エラー：伝票番号が見つかりません','↓ クリアボタンで戻る');
+      beep('error'); vib([100,50,100]);
+      cNg++; addLog('ng','伝票未登録: '+val); updateCounters();
+      isErr=true; setClear(true);
+    }
+  } else {
+    // 照合：JANがあればJAN、なければ商品コードで照合
+    var scanTarget = (curItem.jan && /^\d+$/.test(curItem.jan)) ? curItem.jan : curItem.code;
+    if (val === scanTarget) {
+      stopLocSpeech();
+      done.add(val); cOk++; setStatus('ok'); beep('ok'); vib([50,30,50]);
+      addLog('ok', curItem.name + ' / ' + curItem.code); curItem=null; updateCounters();
+      if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
+    } else {
+      stopLocSpeech();
+      cNg++; setStatus('ng','NG！ 商品が違います','正しい: '+scanTarget);
+      beep('ng'); vib([200,50,200]);
+      addLog('ng','誤: '+val+'（正: '+scanTarget+'）'); updateCounters();
+      isErr=true; setClear(true);
+    }
+  }
+}
+
+// ===== SCAN INPUT =====
+var scanInput=document.getElementById('scanInput'), autoTmr;
+scanInput.addEventListener('input', function() {
+  clearTimeout(autoTmr);
+  var v=this.value.trim(); if(!v) return;
+  autoTmr=setTimeout(function(){
+    var val=scanInput.value.trim(); if(!val) return;
+    scanInput.value=''; processScan(val);
+    setTimeout(function(){ scanInput.focus(); },50);
+  }, 300);
+});
+scanInput.addEventListener('keydown', function(e) {
+  if (e.key==='Enter'||e.keyCode===13) {
+    e.preventDefault(); clearTimeout(autoTmr);
+    var val=this.value.trim(); this.value=''; processScan(val);
+    setTimeout(function(){ scanInput.focus(); },50);
+  }
+});
+// 起動時にURLからデータ読み込み
+if (loadFromURL()) { startScan(); }
+</script>
+</body>
+</html>
