@@ -513,6 +513,19 @@ function bind(id, fn) {
 }
 
 // ===== START =====
+// ===== START SCAN =====
+function startScan() {
+  total = Object.keys(db).length;
+  cOk = 0; cNg = 0; done = new Set(); curItem = null; isErr = false;
+  updateCounters();
+  document.getElementById('counters').classList.add('show');
+  document.getElementById('logWrap').innerHTML = '';
+  setStatus('ready');
+  showPage('pageScan');
+  toast(total + '件 読み込みました');
+  setTimeout(function() { document.getElementById('scanInput').focus(); }, 400);
+}
+
 // ===== AUTO LOAD FROM GITHUB =====
 var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
 
