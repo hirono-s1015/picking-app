@@ -245,7 +245,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
   <div id="pageSetup" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;">
     <div class="page-title">データを読み込む</div>
     <p class="page-desc">
-      GitHubに <code>data.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
+      GitHubに <code>リスト.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
     </p>
     <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">今日のデータを読み込む ▶</a>
     <div class="divider">または 手動でCSVを読み込む</div>
@@ -544,7 +544,7 @@ bind('btnAutoLoad', function() {
       startScan();
     })
     .catch(function(err) {
-      toast('data.csvが見つかりません。GitHubにアップロードしてください。');
+      toast('リスト.csvが見つかりません。GitHubにアップロードしてください。');
       document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
     });
 });
