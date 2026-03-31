@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>検品アプリ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root {
   --bg: #2d2d2d;
@@ -109,6 +110,18 @@ textarea:focus { border-color: rgba(255,255,255,0.4); }
   -webkit-appearance: none;
 }
 .btn-main:active { opacity: 0.8; }
+.btn-secondary {
+  display: block; width: 100%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text); border-radius: 14px;
+  font-size: 15px; font-weight: 700;
+  padding: 15px; text-align: center;
+  cursor: pointer; text-decoration: none;
+  font-family: sans-serif;
+  -webkit-appearance: none;
+}
+.btn-secondary:active { opacity: 0.7; }
 
 .btn-sub {
   display: block; width: 100%;
@@ -247,7 +260,21 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 
     <textarea id="csvData" placeholder="1234567890,SHOE-M-BLK&#10;0987654321,SHOE-L-WHT&#10;..."></textarea>
 
-    <a class="btn-main" id="btnStart" href="javascript:void(0)">ファイルを読み込んでスキャン開始</a>
+    <a class="btn-main" id="btnGenQR" href="javascript:void(0)">QRコードを生成する →</a>
+    <a class="btn-secondary" id="btnStart" href="javascript:void(0)">このままスキャン開始</a>
+  </div>
+
+  <!-- ===== QR PAGE ===== -->
+  <div id="pageQR" style="display:none;width:100%;max-width:480px;flex-direction:column;gap:16px;text-align:center;">
+    <div class="page-title">QRコードが生成されました</div>
+    <p class="page-desc">印刷またはLINE・メールで送ってください。<br>スマホで読み取るとアプリが即起動します。</p>
+    <div id="qrBox" style="background:#fff;border-radius:16px;padding:20px;display:flex;align-items:center;justify-content:center;margin:0 auto;"></div>
+    <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--muted);word-break:break-all;text-align:left;line-height:1.6;">
+      <b style="color:var(--text);display:block;margin-bottom:4px;font-size:12px;">生成されたURL</b>
+      <span id="qrUrlText"></span>
+    </div>
+    <a class="btn-main" id="btnPrint" href="javascript:void(0)">印刷する</a>
+    <a class="btn-secondary" id="btnBackToSetup" href="javascript:void(0)">← データを変更する</a>
   </div>
 
   <!-- ===== SCAN PAGE ===== -->
@@ -482,6 +509,67 @@ function bind(id, fn) {
 }
 
 // ===== START =====
+// ===== QR GENERATE =====
+function showPage(id) {
+  ['pageSetup','pageQR','pageScan'].forEach(function(p) {
+    var el = document.getElementById(p);
+    if (el) el.style.display = 'none';
+  });
+  var target = document.getElementById(id);
+  if (target) target.style.display = 'flex';
+}
+
+bind('btnGenQR', function() {
+  var text = document.getElementById('csvData').value.trim();
+  if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
+  var d = parseCSV(text);
+  if (Object.keys(d).length === 0) { toast('有効なデータがありません'); return; }
+
+  // URLにデータを埋め込む
+  var encoded = Object.keys(d).map(function(k) {
+    var v = d[k];
+    return encodeURIComponent(k) + ':' + encodeURIComponent(v.name) + ':' + encodeURIComponent(v.code) + ':' + encodeURIComponent(v.loc) + ':' + encodeURIComponent(v.jan||'') + ':' + encodeURIComponent(v.pname||'');
+  }).join('|');
+  var base = location.href.split('?')[0].split('#')[0];
+  var url = base + '?d=' + encoded;
+
+  document.getElementById('qrBox').innerHTML = '';
+  try {
+    new QRCode(document.getElementById('qrBox'), {
+      text: url, width: 220, height: 220,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(err) { toast('QR生成に失敗しました（データが多すぎる可能性があります）'); return; }
+
+  document.getElementById('qrUrlText').textContent = url;
+  showPage('pageQR');
+});
+
+bind('btnPrint', function() { window.print(); });
+bind('btnBackToSetup', function() { showPage('pageSetup'); });
+
+// URLからデータ自動読み込み
+function loadFromURL() {
+  var m = location.search.match(/[?&]d=([^&]+)/);
+  if (!m) return false;
+  try {
+    db = {};
+    m[1].split('|').forEach(function(pair) {
+      var parts = pair.split(':');
+      if (parts.length < 3) return;
+      var slip  = decodeURIComponent(parts[0]);
+      var name  = decodeURIComponent(parts[1]);
+      var code  = decodeURIComponent(parts[2]);
+      var loc   = parts[3] ? decodeURIComponent(parts[3]) : '';
+      var jan   = parts[4] ? decodeURIComponent(parts[4]) : '';
+      var pname = parts[5] ? decodeURIComponent(parts[5]) : '';
+      if (slip && /^\d+$/.test(slip)) db[slip] = { name:name, code:code, loc:loc, jan:jan, pname:pname };
+    });
+    return Object.keys(db).length > 0;
+  } catch(e) { return false; }
+}
+
 bind('btnStart', function() {
   var text = document.getElementById('csvData').value.trim();
   if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
@@ -629,6 +717,8 @@ scanInput.addEventListener('keydown', function(e) {
     setTimeout(function(){ scanInput.focus(); },50);
   }
 });
+// 起動時にURLからデータ読み込み
+if (loadFromURL()) { startScan(); }
 </script>
 </body>
 </html>
