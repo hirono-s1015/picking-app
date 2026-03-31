@@ -245,7 +245,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
   <div id="pageSetup" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;">
     <div class="page-title">データを読み込む</div>
     <p class="page-desc">
-      GitHubに <code>リスト.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
+      GitHubに <code>ZAC.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
     </p>
     <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">今日のデータを読み込む ▶</a>
     <div class="divider">または 手動でCSVを読み込む</div>
@@ -514,7 +514,7 @@ function bind(id, fn) {
 
 // ===== START =====
 // ===== AUTO LOAD FROM GITHUB =====
-var CSV_URL = 'https://hirono-s1015.github.io/picking-app/%E3%83%AA%E3%82%B9%E3%83%88.csv';
+var CSV_URL = 'https://hirono-s1015.github.io/picking-app/ZAC.csv';
 
 bind('btnAutoLoad', function() {
   document.getElementById('btnAutoLoad').textContent = '読み込み中...';
@@ -546,7 +546,7 @@ bind('btnAutoLoad', function() {
       startScan();
     })
     .catch(function(err) {
-      toast('リスト.csvが見つかりません。GitHubにアップロードしてください。');
+      toast('ZAC.csvが見つかりません。GitHubにアップロードしてください。');
       document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
     });
 });
