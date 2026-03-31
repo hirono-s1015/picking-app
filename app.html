@@ -530,6 +530,11 @@ function startScan() {
 var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
 
 bind('btnAutoLoad', function() {
+  // iPhoneで音声を有効化するためのタップ初期化
+  try {
+    var u = new SpeechSynthesisUtterance('');
+    window.speechSynthesis.speak(u);
+  } catch(e) {}
   document.getElementById('btnAutoLoad').textContent = '読み込み中...';
   fetch(CSV_URL + '?t=' + Date.now())
     .then(function(res) {
