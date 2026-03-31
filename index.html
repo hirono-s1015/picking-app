@@ -456,7 +456,9 @@ var db={}, curItem=null, total=0, cOk=0, cNg=0, done=new Set(), isErr=false;
 function parseCSV(text) {
   var d = {};
   text.split(/\r?\n/).forEach(function(line) {
-    var p = line.split(',');
+    // カンマ・読点・タブのいずれでも対応
+    var sep = line.indexOf(',') !== -1 ? ',' : line.indexOf('\t') !== -1 ? '\t' : '、';
+    var p = line.split(sep);
     // 列構成: 伝票番号,送り先名,商品コード,受注数,商品名,ロケ,発送伝票番号,JAN
     if (p.length >= 7) {
       var slip = p[6].trim(); // 発送伝票番号
