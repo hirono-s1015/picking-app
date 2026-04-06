@@ -726,11 +726,19 @@ function showItem(item, idx, total_items) {
   document.getElementById('targetLoc').textContent  = item.loc;
   // 同梱バッジ
   var badge = document.getElementById('bundleBadge');
+  var targetBox = document.getElementById('targetBox');
   if (total_items > 1) {
     badge.textContent = '同梱 ' + (idx+1) + ' / ' + total_items;
     badge.style.display = 'block';
+    // 奇数番目：黒、偶数番目：グレー（交互）
+    if ((idx + 1) % 2 === 0) {
+      targetBox.style.background = '#2d2d2d';
+    } else {
+      targetBox.style.background = '#000000';
+    }
   } else {
     badge.style.display = 'none';
+    targetBox.style.background = '#000000';
   }
   var hasJan = item.jan && /^\d+$/.test(item.jan);
   var pnameFormatted = formatPname(item.pname);
