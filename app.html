@@ -231,7 +231,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 <body>
 
 <header>
-  <div class="logo">検品アプリ</div>
+  <div class="logo">WMS AZU 🐨</div>
   <div class="counters" id="counters">
     <span>完了 <b id="cntOk">0</b></span>
     <span>NG <b id="cntNg">0</b></span>
@@ -456,10 +456,13 @@ var db={}, curItem=null, curItems=null, curIdx=0, total=0, cOk=0, cNg=0, done=ne
 // ===== CSV PARSE =====
 function parseCSV(text) {
   var d = {};
+  // 1行目でメインの区切り文字を判定（読点優先）
+  var firstLine = text.split(/\r?\n/)[0] || '';
+  var mainSep = firstLine.indexOf('、') !== -1 ? '、'
+              : firstLine.indexOf('\t') !== -1 ? '\t' : ',';
+
   text.split(/\r?\n/).forEach(function(line) {
-    // カンマ・読点・タブのいずれでも対応
-    var sep = line.indexOf(',') !== -1 ? ',' : line.indexOf('\t') !== -1 ? '\t' : '、';
-    var p = line.split(sep);
+    var p = line.split(mainSep);
     // 列構成: 伝票番号,送り先名,商品コード,受注数,商品名,ロケ,発送伝票番号,JAN
     if (p.length >= 7) {
       var slip  = p[6].trim(); // 発送伝票番号
