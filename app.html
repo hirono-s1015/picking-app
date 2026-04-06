@@ -739,18 +739,21 @@ function processScan(val) {
       isErr=true; setClear(true);
     }
   } else {
-    // 照合：JANがあればJAN、なければ商品コードで照合
-    var scanTarget = (curItem.jan && /^\d+$/.test(curItem.jan)) ? curItem.jan : curItem.code;
-    if (val === scanTarget) {
+    // 照合：商品コードまたはJANコード（どちらでもOK）
+    var hasJan = curItem.jan && /^\d+$/.test(curItem.jan);
+    var matchOk = (val === curItem.code) || (hasJan && val === curItem.jan);
+    if (matchOk) {
       stopLocSpeech();
       done.add(val); cOk++; setStatus('ok'); beep('ok'); vib([50,30,50]);
       addLog('ok', curItem.name + ' / ' + curItem.code); curItem=null; updateCounters();
       if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
     } else {
       stopLocSpeech();
-      cNg++; setStatus('ng','NG！ 商品が違います','正しい: '+scanTarget);
+      cNg++;
+      var correctInfo = hasJan ? curItem.code + ' または ' + curItem.jan : curItem.code;
+      setStatus('ng','NG！ 商品が違います','正しい: ' + correctInfo);
       beep('ng'); vib([200,50,200]);
-      addLog('ng','誤: '+val+'（正: '+scanTarget+'）'); updateCounters();
+      addLog('ng','誤: '+val+'（正: '+curItem.code+(hasJan?' / '+curItem.jan:'')+'）'); updateCounters();
       isErr=true; setClear(true);
     }
   }
