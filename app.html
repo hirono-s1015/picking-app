@@ -289,6 +289,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
     </div>
 
     <div class="target-box" id="targetBox">
+      <div id="bundleBadge" style="display:none;background:#e94560;color:#fff;font-size:14px;font-weight:700;padding:6px 16px;border-radius:50px;margin-bottom:6px;letter-spacing:0.05em;"></div>
       <div class="t-row">
         <div class="t-label">送り先</div>
         <div class="t-name" id="targetName">—</div>
@@ -450,7 +451,7 @@ function toast(msg, dur) {
 }
 
 // ===== STATE =====
-var db={}, curItem=null, total=0, cOk=0, cNg=0, done=new Set(), isErr=false;
+var db={}, curItem=null, curItems=null, curIdx=0, total=0, cOk=0, cNg=0, done=new Set(), isErr=false;
 
 // ===== CSV PARSE =====
 function parseCSV(text) {
@@ -461,15 +462,16 @@ function parseCSV(text) {
     var p = line.split(sep);
     // 列構成: 伝票番号,送り先名,商品コード,受注数,商品名,ロケ,発送伝票番号,JAN
     if (p.length >= 7) {
-      var slip = p[6].trim(); // 発送伝票番号
-      var name = p[1].trim(); // 送り先名
-      var code = p[2].trim(); // 商品コード
-      var loc  = p[5].trim(); // ロケ
-      var jan  = p.length >= 8 ? p[7].trim() : ''; // JAN（あれば）
-      // 発送伝票番号が数字のみの行だけ読み込む（ヘッダー行を自動スキップ）
+      var slip  = p[6].trim(); // 発送伝票番号
+      var name  = p[1].trim(); // 送り先名
+      var code  = p[2].trim(); // 商品コード
+      var loc   = p[5].trim(); // ロケ
+      var jan   = p.length >= 8 ? p[7].trim() : ''; // JAN（あれば）
       var pname = p[4].trim(); // 商品名
+      // 発送伝票番号が数字のみの行だけ読み込む（ヘッダー行を自動スキップ）
       if (slip && /^\d+$/.test(slip)) {
-        d[slip] = { name: name, code: code, loc: loc, jan: jan, pname: pname };
+        if (!d[slip]) d[slip] = [];
+        d[slip].push({ name: name, code: code, loc: loc, jan: jan, pname: pname });
       }
     }
   });
@@ -658,7 +660,7 @@ bind('btnBack', function() {
 // ===== CLEAR =====
 bind('btnClear', function() {
   stopLocSpeech();
-  isErr=false; curItem=null; setClear(false);
+  isErr=false; curItem=null; curItems=null; curIdx=0; setClear(false);
   setStatus('ready'); document.body.className='';
   setTimeout(function(){ document.getElementById('scanInput').focus(); }, 50);
 });
@@ -705,6 +707,35 @@ function addLog(type, text) {
   if (w.children.length>20) w.removeChild(w.lastChild);
 }
 
+// ===== SHOW ITEM =====
+function showItem(item, idx, total_items) {
+  document.getElementById('targetName').textContent = item.name;
+  document.getElementById('targetLoc').textContent  = item.loc;
+  // 同梱バッジ
+  var badge = document.getElementById('bundleBadge');
+  if (total_items > 1) {
+    badge.textContent = '同梱 ' + (idx+1) + ' / ' + total_items;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+  var hasJan = item.jan && /^\d+$/.test(item.jan);
+  var pnameFormatted = formatPname(item.pname);
+  if (hasJan) {
+    document.getElementById('targetJan').textContent      = item.jan;
+    document.getElementById('targetCodeSub').textContent  = item.code;
+    document.getElementById('targetPnameSub').innerHTML   = pnameFormatted;
+    document.getElementById('targetJanWrap').style.display  = 'block';
+    document.getElementById('targetCodeWrap').style.display = 'none';
+  } else {
+    document.getElementById('targetCode').textContent      = item.code;
+    document.getElementById('targetPname').innerHTML       = pnameFormatted;
+    document.getElementById('targetJanWrap').style.display  = 'none';
+    document.getElementById('targetCodeWrap').style.display = 'block';
+  }
+  setStatus('wait');
+}
+
 // ===== SCAN LOGIC =====
 function processScan(val) {
   if (!val) return;
@@ -712,26 +743,18 @@ function processScan(val) {
   if (!curItem) {
     // 発送伝票番号スキャン
     if (db[val]) {
-      curItem = db[val]; // { name, code, loc, jan }
-      document.getElementById('targetName').textContent = curItem.name;
-      document.getElementById('targetLoc').textContent  = curItem.loc;
-      var hasJan = curItem.jan && /^\d+$/.test(curItem.jan);
-      // 商品名を25文字でスペース改行
-      var pnameFormatted = formatPname(curItem.pname);
-      if (hasJan) {
-        document.getElementById('targetJan').textContent      = curItem.jan;
-        document.getElementById('targetCodeSub').textContent  = curItem.code;
-        document.getElementById('targetPnameSub').innerHTML   = pnameFormatted;
-        document.getElementById('targetJanWrap').style.display  = 'block';
-        document.getElementById('targetCodeWrap').style.display = 'none';
+      curItems = db[val]; // 同梱の配列
+      curIdx = 0;
+      curItem = curItems[0];
+      var total_items = curItems.length;
+      showItem(curItem, curIdx, total_items);
+      // 同梱の場合は件数を読み上げてからロケ読み上げ
+      if (total_items > 1) {
+        speak(total_items + '点同梱です。', function() { startLocSpeech(curItem.loc); });
       } else {
-        document.getElementById('targetCode').textContent      = curItem.code;
-        document.getElementById('targetPname').innerHTML       = pnameFormatted;
-        document.getElementById('targetJanWrap').style.display  = 'none';
-        document.getElementById('targetCodeWrap').style.display = 'block';
+        startLocSpeech(curItem.loc);
       }
-      setStatus('wait'); vib(50);
-      startLocSpeech(curItem.loc);
+      vib(50);
     } else {
       setStatus('error','エラー：伝票番号が見つかりません','↓ クリアボタンで戻る');
       beep('error'); vib([100,50,100]);
@@ -744,9 +767,24 @@ function processScan(val) {
     var matchOk = (val === curItem.code) || (hasJan && val === curItem.jan);
     if (matchOk) {
       stopLocSpeech();
-      done.add(val); cOk++; setStatus('ok'); beep('ok'); vib([50,30,50]);
-      addLog('ok', curItem.name + ' / ' + curItem.code); curItem=null; updateCounters();
-      if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
+      cOk++;
+      addLog('ok', curItem.name + ' / ' + curItem.code);
+      updateCounters();
+      curIdx++;
+      if (curIdx < curItems.length) {
+        // まだ同梱の商品が残っている
+        curItem = curItems[curIdx];
+        var remaining = curItems.length - curIdx;
+        speak('正解です。次の商品があります。', function() { startLocSpeech(curItem.loc); });
+        vib([50,30,50]);
+        showItem(curItem, curIdx, curItems.length);
+      } else {
+        // 全商品スキャン完了
+        done.add(val); curItem=null; curItems=null; curIdx=0;
+        setStatus('ok'); beep('ok'); vib([50,30,50]);
+        updateCounters();
+        if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
+      }
     } else {
       stopLocSpeech();
       cNg++;
