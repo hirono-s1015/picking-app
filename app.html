@@ -469,7 +469,17 @@ function parseCSV(text) {
       var name  = p[1].trim(); // 送り先名
       var code  = p[2].trim(); // 商品コード
       var loc   = p[5].trim(); // ロケ
-      var jan   = p.length >= 8 ? p[7].trim() : ''; // JAN（あれば）
+      var janRaw = p.length >= 8 ? p[7].trim() : '';
+      // 指数表示（例：2.10556E+12）を通常の数字に変換
+      var jan = '';
+      if (janRaw) {
+        var janNum = Number(janRaw);
+        if (!isNaN(janNum) && janNum > 0) {
+          jan = janNum.toFixed(0);
+        } else {
+          jan = janRaw;
+        }
+      } // JAN（あれば）
       var pname = p[4].trim(); // 商品名
       // 発送伝票番号が数字のみの行だけ読み込む（ヘッダー行を自動スキップ）
       if (slip && /^\d+$/.test(slip)) {
