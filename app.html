@@ -362,7 +362,7 @@ function speak(msg, onEnd) {
     window.speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(msg);
     u.lang = 'ja-JP';
-    u.rate = 1.15;
+    u.rate = 0.9;
     u.pitch = 1.8;
     u.volume = 1.0;
     if (onEnd) u.onend = onEnd;
@@ -395,7 +395,7 @@ function startLocSpeech(loc) {
     if (!curItem) return;
     var u = new SpeechSynthesisUtterance(msg);
     u.lang = 'ja-JP';
-    u.rate = 1.7;
+    u.rate = 1.2;
     u.pitch = 1.4;
     u.volume = 1.0;
     u.onend = function() {
