@@ -696,6 +696,9 @@ function setStatus(state, msg, sub) {
   // 終了するボタン：送り状スキャン待ちの時のみ表示
   var finBtn = document.getElementById('btnFinish');
   if (finBtn) finBtn.style.display = (state === 'ready') ? 'block' : 'none';
+  // クリアボタン：商品スキャン待ち（wait）の時も表示
+  var clrBtn = document.getElementById('btnClear');
+  if (clrBtn && state === 'wait') clrBtn.classList.add('visible');
   document.getElementById('sIcon').textContent = {ready:'📦',wait:'🔍',ok:'✅',ng:'❌',error:'⚠️'}[state]||'📦';
   document.getElementById('sText').textContent = {
     ready:'送り状をスキャン', wait:'商品を探してスキャン',
