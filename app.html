@@ -567,6 +567,12 @@ document.getElementById('loginName').addEventListener('keydown', function(e) {
 var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
 
 bind('btnAutoLoad', function() {
+  var name = (document.getElementById('loginName').value || '').trim();
+  if (!name) {
+    toast('担当者名を入力してください');
+    document.getElementById('loginName').focus();
+    return;
+  }
   // iPhoneで音声を有効化するためのタップ初期化
   try {
     var u = new SpeechSynthesisUtterance('');
@@ -613,32 +619,6 @@ function showPage(id) {
   if (target) target.style.display = 'flex';
 }
 
-bind('btnGenQR', function() {
-  var text = document.getElementById('csvData').value.trim();
-  if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
-  var d = parseCSV(text);
-  if (Object.keys(d).length === 0) { toast('有効なデータがありません'); return; }
-
-  // URLにデータを埋め込む
-  var encoded = Object.keys(d).map(function(k) {
-    var v = d[k];
-    return encodeURIComponent(k) + ':' + encodeURIComponent(v.name) + ':' + encodeURIComponent(v.code) + ':' + encodeURIComponent(v.loc) + ':' + encodeURIComponent(v.jan||'') + ':' + encodeURIComponent(v.pname||'');
-  }).join('|');
-  var base = location.href.split('?')[0].split('#')[0];
-  var url = base + '?d=' + encoded;
-
-  document.getElementById('qrBox').innerHTML = '';
-  try {
-    new QRCode(document.getElementById('qrBox'), {
-      text: url, width: 220, height: 220,
-      colorDark: '#000000', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  } catch(err) { toast('QR生成に失敗しました（データが多すぎる可能性があります）'); return; }
-
-  document.getElementById('qrUrlText').textContent = url;
-  showPage('pageQR');
-});
 
 bind('btnPrint', function() { window.print(); });
 bind('btnBackToSetup', function() { showPage('pageSetup'); });
@@ -664,22 +644,6 @@ function loadFromURL() {
   } catch(e) { return false; }
 }
 
-bind('btnStart', function() {
-  var text = document.getElementById('csvData').value.trim();
-  if (!text) { toast('CSVファイルを選択するか、データを貼り付けてください'); return; }
-  db = parseCSV(text);
-  total = Object.keys(db).length;
-  if (total === 0) { toast('有効なデータがありません。ヘッダー行のみの場合は送り状番号が数字か確認してください'); return; }
-  cOk=0; cNg=0; done=new Set(); curItem=null; isErr=false;
-  document.getElementById('logWrap').innerHTML = '';
-  updateCounters();
-  document.getElementById('counters').classList.add('show');
-  setStatus('ready');
-  document.getElementById('pageSetup').style.display = 'none';
-  document.getElementById('pageScan').style.display  = 'flex';
-  toast(total + '件 読み込みました');
-  setTimeout(function(){ document.getElementById('scanInput').focus(); }, 400);
-});
 
 // ===== BACK =====
 bind('btnBack', function() {
