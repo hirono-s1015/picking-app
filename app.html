@@ -110,6 +110,19 @@ textarea:focus { border-color: rgba(255,255,255,0.4); }
   -webkit-appearance: none;
 }
 .btn-main:active { opacity: 0.8; }
+.btn-start-inv {
+  display: block; width: 100%;
+  background: transparent;
+  border: 2px solid var(--text);
+  color: var(--text);
+  border-radius: 14px;
+  font-size: 17px; font-weight: 700;
+  padding: 17px; text-align: center;
+  cursor: pointer; text-decoration: none;
+  font-family: sans-serif;
+  -webkit-appearance: none;
+}
+.btn-start-inv:active { background: rgba(255,255,255,0.1); }
 .btn-secondary {
   display: block; width: 100%;
   background: rgba(255,255,255,0.08);
@@ -156,15 +169,15 @@ textarea:focus { border-color: rgba(255,255,255,0.4); }
   width: 100%; max-width: 480px;
   background: #2d2d2d;
   border: 1.5px solid rgba(255,255,255,0.15);
-  border-radius: 22px; padding: 32px 24px;
+  border-radius: 16px; padding: 14px 20px;
   text-align: center; transition: all 0.3s;
 }
 body.ok   .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
 body.ng   .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
 body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d2d; }
-.s-icon { font-size: 54px; line-height: 1; margin-bottom: 14px; display: block; }
-.s-text { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-.s-sub  { font-size: 13px; color: var(--muted); }
+.s-icon { font-size: 28px; line-height: 1; margin-bottom: 4px; display: block; }
+.s-text { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+.s-sub  { font-size: 11px; color: var(--muted); }
 
 /* ===== TARGET BOX ===== */
 .target-box {
@@ -181,7 +194,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 .t-row   { width: 100%; text-align: center; }
 .t-name  { font-size: 22px; font-weight: 700; color: var(--text); }
 .t-loc   { font-size: 30px; font-weight: 700; color: #ffffff; letter-spacing: 0.05em; }
-.t-code  { font-size: 24px; font-weight: 700; color: #ffffff; word-break: break-all; }
+.t-code  { font-size: 18px; font-weight: 600; color: #ffffff; word-break: break-all; }
 .t-divider { width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 10px 0; }
 .t-jan   { font-size: 20px; font-weight: 700; color: #a29bfe; letter-spacing: 0.05em; }
 .t-sub   { font-size: 16px; font-weight: 600; color: var(--muted); word-break: break-all; }
@@ -243,27 +256,16 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 
   <!-- ===== SETUP PAGE ===== -->
   <div id="pageSetup" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;">
-    <div class="page-title">データを読み込む</div>
-    <p class="page-desc">
-      GitHubに <code>ZAC.csv</code> をアップロード済みの場合は「今日のデータを読み込む」をタップするだけでOKです。
-    </p>
-    <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">今日のデータを読み込む ▶</a>
-    <div class="divider">または 手動でCSVを読み込む</div>
-
-    <!-- ファイル読み込み -->
-    <label class="file-area">
-      <input type="file" id="fileInput" accept=".csv,.txt">
-      <span class="file-icon">📂</span>
-      <p>ここをタップしてCSVファイルを選択</p>
-      <div class="file-name" id="fileName"></div>
-    </label>
-
-    <div class="divider">または テキストを直接貼り付け</div>
-
-    <textarea id="csvData" placeholder="1234567890,SHOE-M-BLK&#10;0987654321,SHOE-L-WHT&#10;..."></textarea>
-
-    <a class="btn-main" id="btnGenQR" href="javascript:void(0)">QRコードを生成する →</a>
-    <a class="btn-secondary" id="btnStart" href="javascript:void(0)">このままスキャン開始</a>
+    <div class="page-title">ピッキング開始</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <label style="font-size:13px;color:var(--muted);">担当者名</label>
+      <input type="text" id="loginName" placeholder="名前を入力 またはスキャン"
+        style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:16px;padding:14px 16px;outline:none;-webkit-appearance:none;">
+    </div>
+    <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">ピッキング開始 ▶</a>
+    <!-- 非表示で保持 -->
+    <input type="file" id="fileInput" accept=".csv,.txt" style="display:none;">
+    <textarea id="csvData" style="display:none;"></textarea>
   </div>
 
   <!-- ===== QR PAGE ===== -->
@@ -344,7 +346,8 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 
     <div class="log-wrap" id="logWrap"></div>
 
-    <a class="btn-sub" id="btnBack" href="javascript:void(0)">← データを変更する</a>
+    <div id="operatorDisplay" style="font-size:12px;color:var(--muted);text-align:center;"></div>
+  <a class="btn-sub" id="btnBack" href="javascript:void(0)" style="color:var(--ng);border-color:rgba(233,69,96,0.3);">✕ クリア（最初からやり直す）</a>
 
   </div>
 
@@ -421,23 +424,23 @@ function beep(type) {
   else if (type === 'error') speak('伝票番号が見つかりません');
 }
 
-// 商品名を25文字でスペース位置に改行
+// 商品名を後ろから2つのスペースで3行に分割して左寄せ表示
 function formatPname(pname) {
-  if (!pname || pname.length <= 25) return pname || '';
-  var words = pname.split(' ');
-  var lines = [], current = '';
-  words.forEach(function(word) {
-    if (current.length === 0) {
-      current = word;
-    } else if ((current + ' ' + word).length <= 25) {
-      current += ' ' + word;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  });
-  if (current) lines.push(current);
-  return lines.join('<br>');
+  if (!pname) return '';
+  var idx1 = pname.lastIndexOf(' ');
+  if (idx1 < 0) return '<div>' + pname + '</div>';
+  var line3 = pname.slice(idx1 + 1);
+  var rest1 = pname.slice(0, idx1);
+  var idx2 = rest1.lastIndexOf(' ');
+  if (idx2 < 0) {
+    return '<div>' + rest1 + '</div>' +
+           '<div>' + line3 + '</div>';
+  }
+  var line2 = rest1.slice(idx2 + 1);
+  var line1 = rest1.slice(0, idx2);
+  return '<div>' + line1 + '</div>' +
+         '<div>' + line2 + '</div>' +
+         '<div>' + line3 + '</div>';
 }
 function vib(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
 
@@ -451,7 +454,7 @@ function toast(msg, dur) {
 }
 
 // ===== STATE =====
-var db={}, curItem=null, curItems=null, curIdx=0, total=0, cOk=0, cNg=0, done=new Set(), isErr=false;
+var db={}, curItem=null, curItems=null, curIdx=0, curSlip='', total=0, cOk=0, cNg=0, done=new Set(), doneSlips=new Set(), isErr=false;
 
 // ===== CSV PARSE =====
 function parseCSV(text) {
@@ -531,15 +534,34 @@ function bind(id, fn) {
 // ===== START SCAN =====
 function startScan() {
   total = Object.keys(db).length;
-  cOk = 0; cNg = 0; done = new Set(); curItem = null; isErr = false;
+  cOk = 0; cNg = 0; done = new Set(); doneSlips = new Set(); curItem = null; curSlip = ''; isErr = false;
   updateCounters();
   document.getElementById('counters').classList.add('show');
   document.getElementById('logWrap').innerHTML = '';
   setStatus('ready');
   showPage('pageScan');
+  // 担当者名とピッキング開始ログを表示
+  var name = (document.getElementById('loginName').value || '').trim() || '未設定';
+  var now = new Date();
+  var timeStr = now.getFullYear() + '/' + (now.getMonth()+1) + '/' + now.getDate() + ' ' +
+    ('0'+now.getHours()).slice(-2) + ':' + ('0'+now.getMinutes()).slice(-2);
+  document.getElementById('operatorDisplay').textContent = '担当: ' + name + '　開始: ' + timeStr;
+  // ログに開始記録を追加
+  var startLog = document.createElement('div');
+  startLog.style.cssText = 'font-size:11px;padding:6px 11px;border-radius:9px;background:rgba(255,255,255,0.08);color:var(--muted);text-align:center;';
+  startLog.textContent = '【開始】' + name + ' ' + timeStr + ' / ' + total + '件';
+  document.getElementById('logWrap').appendChild(startLog);
   toast(total + '件 読み込みました');
   setTimeout(function() { document.getElementById('scanInput').focus(); }, 400);
 }
+
+// 担当者名入力欄でEnterを押したらピッキング開始
+document.getElementById('loginName').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();
+    document.getElementById('btnAutoLoad').click();
+  }
+});
 
 // ===== AUTO LOAD FROM GITHUB =====
 var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
@@ -570,14 +592,14 @@ bind('btnAutoLoad', function() {
       db = parseCSV(text);
       if (Object.keys(db).length === 0) {
         toast('有効なデータがありません');
-        document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+        document.getElementById('btnAutoLoad').textContent = 'ピッキング開始 ▶';
         return;
       }
       startScan();
     })
     .catch(function(err) {
       toast('ZAC.csvが見つかりません。GitHubにアップロードしてください。');
-      document.getElementById('btnAutoLoad').textContent = '今日のデータを読み込む ▶';
+      document.getElementById('btnAutoLoad').textContent = 'ピッキング開始 ▶';
     });
 });
 
@@ -763,7 +785,14 @@ function processScan(val) {
   isErr=false; setClear(false);
   if (!curItem) {
     // 発送伝票番号スキャン
+    if (doneSlips.has(val)) {
+      setStatus('error','この伝票は完了済みです','別の送り状をスキャンしてください');
+      beep('ng'); vib([100,50,100]);
+      isErr=true; setClear(true);
+      return;
+    }
     if (db[val]) {
+      curSlip = val; // 現在の伝票番号を記録
       curItems = db[val]; // 同梱の配列
       curIdx = 0;
       curItem = curItems[0];
@@ -801,7 +830,7 @@ function processScan(val) {
         showItem(curItem, curIdx, curItems.length);
       } else {
         // 全商品スキャン完了
-        done.add(val); curItem=null; curItems=null; curIdx=0;
+        doneSlips.add(curSlip); done.add(val); curItem=null; curItems=null; curIdx=0;
         setStatus('ok'); beep('ok'); vib([50,30,50]);
         updateCounters();
         if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
