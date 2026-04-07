@@ -359,7 +359,6 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 
     <div id="operatorDisplay" style="font-size:12px;color:var(--muted);text-align:center;"></div>
   <a class="btn-finish" id="btnFinish" href="javascript:void(0)" style="display:none;">✓ 終了する</a>
-  <a class="btn-sub" id="btnBack" href="javascript:void(0)" style="color:var(--ng);border-color:rgba(233,69,96,0.3);">← 送り状スキャンに戻る</a>
 
   </div>
 
@@ -658,16 +657,7 @@ function loadFromURL() {
 
 
 // ===== BACK =====
-bind('btnBack', function() {
-  // 送り状スキャン待ちに戻る（名前入力には戻らない）
-  stopLocSpeech();
-  curItem=null; curItems=null; curIdx=0; curSlip=''; isErr=false;
-  setClear(false);
-  document.getElementById('btnFinish').style.display = 'none';
-  setStatus('ready');
-  document.body.className='';
-  setTimeout(function(){ document.getElementById('scanInput').focus(); }, 50);
-});
+
 
 // ===== CLEAR =====
 // ===== FINISH =====
@@ -703,6 +693,9 @@ function updateCounters() {
 // ===== STATUS =====
 function setStatus(state, msg, sub) {
   document.body.className = {ok:'ok', ng:'ng', error:'ng', wait:'wait'}[state]||'';
+  // 終了するボタン：送り状スキャン待ちの時のみ表示
+  var finBtn = document.getElementById('btnFinish');
+  if (finBtn) finBtn.style.display = (state === 'ready') ? 'block' : 'none';
   document.getElementById('sIcon').textContent = {ready:'📦',wait:'🔍',ok:'✅',ng:'❌',error:'⚠️'}[state]||'📦';
   document.getElementById('sText').textContent = {
     ready:'送り状をスキャン', wait:'商品を探してスキャン',
