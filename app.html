@@ -787,6 +787,7 @@ function processScan(val) {
       curItem = curItems[0];
       var total_items = curItems.length;
       showItem(curItem, curIdx, total_items);
+      setClear(true); // 商品スキャン待ちでクリアボタンを表示
       // 同梱の場合は件数を読み上げてからロケ読み上げ
       if (total_items > 1) {
         speak(total_items + '点同梱です。', function() { startLocSpeech(curItem.loc); });
