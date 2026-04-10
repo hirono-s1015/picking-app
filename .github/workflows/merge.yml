@@ -2,10 +2,8 @@ name: CSV merge
 
 on:
   push:
-    paths:
-      - 'AZU.csv'
-      - 'ZAC1.csv'
-      - 'ZAC2.csv'
+    branches:
+      - main
 
 jobs:
   merge-csv:
