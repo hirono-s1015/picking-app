@@ -250,9 +250,23 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
   white-space: nowrap; pointer-events: none;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ===== GitHub設定ボタン ===== */
+#btnGhSettings {
+  position: fixed; top: 10px; right: 12px; z-index: 200;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%; width: 38px; height: 38px;
+  font-size: 18px; cursor: pointer; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+}
+#btnGhSettings:active { background: rgba(255,255,255,0.18); }
 </style>
 </head>
 <body>
+
+<!-- ===== GitHub設定ボタン（常時表示） ===== -->
+<button id="btnGhSettings" title="GitHub連携設定" onclick="GitHubSettingsUI.render()">⚙️</button>
 
 <header>
   <div class="logo">WMS AZU 🐨</div>
@@ -313,7 +327,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
         <div class="t-loc" id="targetLoc">—</div>
       </div>
       <div class="t-divider"></div>
-      <!-- JANあり：商品コードを大きく表示、JANは参考表示 -->
+      <!-- JANあり -->
       <div id="targetJanWrap" style="display:none;">
         <div class="t-row">
           <div class="t-label">商品名</div>
@@ -329,7 +343,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
           <div class="t-sub" id="targetJan">—</div>
         </div>
       </div>
-      <!-- JANなし：商品コードを大きく表示 -->
+      <!-- JANなし -->
       <div id="targetCodeWrap">
         <div class="t-row">
           <div class="t-label">商品名</div>
@@ -358,7 +372,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
     <div class="log-wrap" id="logWrap"></div>
 
     <div id="operatorDisplay" style="font-size:12px;color:var(--muted);text-align:center;"></div>
-  <a class="btn-finish" id="btnFinish" href="javascript:void(0)" style="display:none;">✓ 終了する</a>
+    <a class="btn-finish" id="btnFinish" href="javascript:void(0)" style="display:none;">✓ 終了する</a>
 
   </div>
 
@@ -366,7 +380,24 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
 
 <div class="toast" id="toast"></div>
 
+<!-- ===== GitHub API モジュール ===== -->
+<script src="github-api-module.js"></script>
+
 <script>
+// ===== GitHub連携初期化 =====
+GitHubSync.init();
+
+// アプリ起動時にdone.jsonを読み込み
+var ghDoneSet = new Set();
+GitHubSync.loadDone().then(function(s) {
+  ghDoneSet = s;
+}).catch(function() {});
+
+// 30秒ごとに他端末の完了状況を同期
+GitHubSync.startPolling(function(newSet) {
+  ghDoneSet = newSet;
+}, 30000);
+
 // ===== AUDIO (音声読み上げ) =====
 var locSpeechTimer = null;
 
@@ -384,8 +415,6 @@ function speak(msg, onEnd) {
   } catch(e) { if (onEnd) onEnd(); }
 }
 
-// ロケをパーツごとに1秒間隔で読み上げる
-// 例: P-01-12-01-02 → 「ピー」(1秒)「ゼロイチ」(1秒)「イチニ」...
 function locToSpeechText(loc) {
   var numMap = {'0':'ゼロ','1':'イチ','2':'ニ','3':'サン','4':'ヨン',
                 '5':'ゴ','6':'ロク','7':'ナナ','8':'ハチ','9':'キュウ'};
@@ -396,29 +425,22 @@ function locToSpeechText(loc) {
       return numMap[c] || c;
     }).join('');
   });
-  // 読点でつなげて1文として読ませる
   return words.join('、');
 }
 
-// 1つのUtteranceで読み上げ、終わったらループ
 function startLocSpeech(loc) {
   stopLocSpeech();
   var msg = locToSpeechText(loc);
-
   function loop() {
     if (!curItem) return;
     var u = new SpeechSynthesisUtterance(msg);
-    u.lang = 'ja-JP';
-    u.rate = 1.2;
-    u.pitch = 1.4;
-    u.volume = 1.0;
+    u.lang = 'ja-JP'; u.rate = 1.2; u.pitch = 1.4; u.volume = 1.0;
     u.onend = function() {
       if (!curItem) return;
       locSpeechTimer = setTimeout(loop, 300);
     };
     window.speechSynthesis.speak(u);
   }
-
   loop();
 }
 
@@ -430,12 +452,11 @@ function stopLocSpeech() {
 
 function beep(type) {
   stopLocSpeech();
-  if (type === 'ok')    speak('正解です。');
+  if (type === 'ok')         speak('正解です。');
   else if (type === 'ng')    speak('商品が違います。');
   else if (type === 'error') speak('伝票番号が見つかりません');
 }
 
-// 商品名を後ろから2つのスペースで3行に分割して左寄せ表示
 function formatPname(pname) {
   if (!pname) return '';
   var idx1 = pname.lastIndexOf(' ');
@@ -444,14 +465,11 @@ function formatPname(pname) {
   var rest1 = pname.slice(0, idx1);
   var idx2 = rest1.lastIndexOf(' ');
   if (idx2 < 0) {
-    return '<div>' + rest1 + '</div>' +
-           '<div>' + line3 + '</div>';
+    return '<div>' + rest1 + '</div>' + '<div>' + line3 + '</div>';
   }
   var line2 = rest1.slice(idx2 + 1);
   var line1 = rest1.slice(0, idx2);
-  return '<div>' + line1 + '</div>' +
-         '<div>' + line2 + '</div>' +
-         '<div>' + line3 + '</div>';
+  return '<div>' + line1 + '</div>' + '<div>' + line2 + '</div>' + '<div>' + line3 + '</div>';
 }
 function vib(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
 
@@ -470,21 +488,18 @@ var db={}, curItem=null, curItems=null, curIdx=0, curSlip='', total=0, cOk=0, cN
 // ===== CSV PARSE =====
 function parseCSV(text) {
   var d = {};
-  // 1行目でメインの区切り文字を判定（読点優先）
   var firstLine = text.split(/\r?\n/)[0] || '';
   var mainSep = firstLine.indexOf('、') !== -1 ? '、'
               : firstLine.indexOf('\t') !== -1 ? '\t' : ',';
 
   text.split(/\r?\n/).forEach(function(line) {
     var p = line.split(mainSep);
-    // 列構成: 伝票番号,送り先名,商品コード,受注数,商品名,ロケ,発送伝票番号,JAN
     if (p.length >= 7) {
-      var slip  = p[6].trim(); // 発送伝票番号
-      var name  = p[1].trim(); // 送り先名
-      var code  = p[2].trim(); // 商品コード
-      var loc   = p[5].trim(); // ロケ
+      var slip  = p[6].trim();
+      var name  = p[1].trim();
+      var code  = p[2].trim();
+      var loc   = p[5].trim();
       var janRaw = p.length >= 8 ? p[7].trim() : '';
-      // 指数表示（例：2.10556E+12）を通常の数字に変換
       var jan = '';
       if (janRaw) {
         var janNum = Number(janRaw);
@@ -493,9 +508,8 @@ function parseCSV(text) {
         } else {
           jan = janRaw;
         }
-      } // JAN（あれば）
-      var pname = p[4].trim(); // 商品名
-      // 発送伝票番号が数字のみの行だけ読み込む（ヘッダー行を自動スキップ）
+      }
+      var pname = p[4].trim();
       if (slip && /^\d+$/.test(slip)) {
         if (!d[slip]) d[slip] = [];
         d[slip].push({ name: name, code: code, loc: loc, jan: jan, pname: pname });
@@ -509,16 +523,9 @@ function parseCSV(text) {
 document.getElementById('fileInput').addEventListener('change', function() {
   var file = this.files[0];
   if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    document.getElementById('csvData').value = e.target.result;
-    document.getElementById('fileName').textContent = '✓ ' + file.name;
-  };
-  // Shift-JIS / UTF-8 両対応
   var sjisReader = new FileReader();
   sjisReader.onload = function(e2) {
     var sjisText = e2.target.result;
-    // 文字化けチェック：UTF-8で読んで化けていたらShift-JISで再読込
     if (sjisText.indexOf('\ufffd') !== -1 || sjisText.indexOf('\x00') !== -1) {
       var sjisReader2 = new FileReader();
       sjisReader2.onload = function(e3) {
@@ -541,7 +548,6 @@ function bind(id, fn) {
   el.addEventListener('touchend', function(e) { e.preventDefault(); fn(); return false; });
 }
 
-// ===== START =====
 // ===== START SCAN =====
 function startScan() {
   total = Object.keys(db).length;
@@ -551,13 +557,11 @@ function startScan() {
   document.getElementById('logWrap').innerHTML = '';
   setStatus('ready');
   showPage('pageScan');
-  // 担当者名とピッキング開始ログを表示
   var name = (document.getElementById('loginName').value || '').trim() || '未設定';
   var now = new Date();
   var timeStr = now.getFullYear() + '/' + (now.getMonth()+1) + '/' + now.getDate() + ' ' +
     ('0'+now.getHours()).slice(-2) + ':' + ('0'+now.getMinutes()).slice(-2);
   document.getElementById('operatorDisplay').textContent = '担当: ' + name + '　開始: ' + timeStr;
-  // ログに開始記録を追加
   var startLog = document.createElement('div');
   startLog.style.cssText = 'font-size:11px;padding:6px 11px;border-radius:9px;background:rgba(255,255,255,0.08);color:var(--muted);text-align:center;';
   startLog.textContent = '【開始】' + name + ' ' + timeStr + ' / ' + total + '件';
@@ -566,7 +570,6 @@ function startScan() {
   setTimeout(function() { document.getElementById('scanInput').focus(); }, 400);
 }
 
-// 担当者名入力欄でEnterを押したらピッキング開始
 document.getElementById('loginName').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' || e.keyCode === 13) {
     e.preventDefault();
@@ -584,7 +587,6 @@ bind('btnAutoLoad', function() {
     document.getElementById('loginName').focus();
     return;
   }
-  // iPhoneで音声を有効化するためのタップ初期化
   try {
     var u = new SpeechSynthesisUtterance('');
     window.speechSynthesis.speak(u);
@@ -596,11 +598,10 @@ bind('btnAutoLoad', function() {
       return res.arrayBuffer();
     })
     .then(function(buffer) {
-      // まずShift-JISで試す、ダメならUTF-8
       var text;
       try {
         text = new TextDecoder('shift-jis').decode(buffer);
-        if (text.indexOf('�') !== -1) {
+        if (text.indexOf('?') !== -1) {
           text = new TextDecoder('utf-8').decode(buffer);
         }
       } catch(e) {
@@ -620,7 +621,7 @@ bind('btnAutoLoad', function() {
     });
 });
 
-// ===== QR GENERATE =====
+// ===== QR =====
 function showPage(id) {
   ['pageSetup','pageQR','pageScan'].forEach(function(p) {
     var el = document.getElementById(p);
@@ -630,11 +631,9 @@ function showPage(id) {
   if (target) target.style.display = 'flex';
 }
 
-
 bind('btnPrint', function() { window.print(); });
 bind('btnBackToSetup', function() { showPage('pageSetup'); });
 
-// URLからデータ自動読み込み
 function loadFromURL() {
   var m = location.search.match(/[?&]d=([^&]+)/);
   if (!m) return false;
@@ -655,11 +654,6 @@ function loadFromURL() {
   } catch(e) { return false; }
 }
 
-
-// ===== BACK =====
-
-
-// ===== CLEAR =====
 // ===== FINISH =====
 bind('btnFinish', function() {
   speak('お疲れ様でした');
@@ -693,10 +687,8 @@ function updateCounters() {
 // ===== STATUS =====
 function setStatus(state, msg, sub) {
   document.body.className = {ok:'ok', ng:'ng', error:'ng', wait:'wait'}[state]||'';
-  // 終了するボタン：送り状スキャン待ちの時のみ表示
   var finBtn = document.getElementById('btnFinish');
   if (finBtn) finBtn.style.display = (state === 'ready') ? 'block' : 'none';
-  // クリアボタン：商品スキャン待ち（wait）の時も表示
   var clrBtn = document.getElementById('btnClear');
   if (clrBtn && state === 'wait') clrBtn.classList.add('visible');
   document.getElementById('sIcon').textContent = {ready:'📦',wait:'🔍',ok:'✅',ng:'❌',error:'⚠️'}[state]||'📦';
@@ -734,13 +726,11 @@ function addLog(type, text) {
 function showItem(item, idx, total_items) {
   document.getElementById('targetName').textContent = item.name;
   document.getElementById('targetLoc').textContent  = item.loc;
-  // 同梱バッジ
   var badge = document.getElementById('bundleBadge');
   var targetBox = document.getElementById('targetBox');
   if (total_items > 1) {
     badge.textContent = '同梱 ' + (idx+1) + ' / ' + total_items;
     badge.style.display = 'block';
-    // 奇数番目：黒、偶数番目：グレー（交互）
     if ((idx + 1) % 2 === 0) {
       targetBox.style.background = '#2d2d2d';
     } else {
@@ -774,6 +764,15 @@ function processScan(val) {
   if (!curItem) {
     // 発送伝票番号スキャン
     document.getElementById('btnFinish').style.display = 'none';
+
+    // ★ 他端末で完了済みかチェック（GitHub done.json）
+    if (ghDoneSet.has(String(val))) {
+      setStatus('error','この伝票は完了済みです（他端末）','別の送り状をスキャンしてください');
+      beep('ng'); vib([100,50,100]);
+      isErr=true; setClear(true);
+      return;
+    }
+
     if (doneSlips.has(val)) {
       setStatus('error','この伝票は完了済みです','別の送り状をスキャンしてください');
       beep('ng'); vib([100,50,100]);
@@ -781,14 +780,13 @@ function processScan(val) {
       return;
     }
     if (db[val]) {
-      curSlip = val; // 現在の伝票番号を記録
-      curItems = db[val]; // 同梱の配列
+      curSlip = val;
+      curItems = db[val];
       curIdx = 0;
       curItem = curItems[0];
       var total_items = curItems.length;
       showItem(curItem, curIdx, total_items);
-      setClear(true); // 商品スキャン待ちでクリアボタンを表示
-      // 同梱の場合は件数を読み上げてからロケ読み上げ
+      setClear(true);
       if (total_items > 1) {
         speak(total_items + '点同梱です。', function() { startLocSpeech(curItem.loc); });
       } else {
@@ -802,7 +800,7 @@ function processScan(val) {
       isErr=true; setClear(true);
     }
   } else {
-    // 照合：商品コードまたはJANコード（どちらでもOK）
+    // 商品スキャン照合
     var hasJan = curItem.jan && /^\d+$/.test(curItem.jan);
     var matchOk = (val === curItem.code) || (hasJan && val === curItem.jan);
     if (matchOk) {
@@ -812,19 +810,44 @@ function processScan(val) {
       updateCounters();
       curIdx++;
       if (curIdx < curItems.length) {
-        // まだ同梱の商品が残っている
         curItem = curItems[curIdx];
-        var remaining = curItems.length - curIdx;
         speak('正解です。次の商品があります。', function() { startLocSpeech(curItem.loc); });
         vib([50,30,50]);
         showItem(curItem, curIdx, curItems.length);
       } else {
-        // 全商品スキャン完了
-        doneSlips.add(curSlip); done.add(val); curItem=null; curItems=null; curIdx=0;
+        // ★ 全商品完了 → GitHub に保存
+        var completedSlip = curSlip;
+        var completedItem = curItems[0]; // 送り先など代表情報
+        var operator = (document.getElementById('loginName').value || '').trim() || '未設定';
+
+        doneSlips.add(completedSlip);
+        done.add(val);
+        curItem=null; curItems=null; curIdx=0;
         setStatus('ok'); beep('ok'); vib([50,30,50]);
         document.getElementById('btnFinish').style.display = 'block';
         updateCounters();
         if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
+
+        // ★ GitHub保存（非同期・失敗してもピッキングは止めない）
+        if (GitHubSync.hasToken()) {
+          // done.json に伝票番号を追加
+          GitHubSync.markDone(completedSlip).then(function() {
+            ghDoneSet.add(String(completedSlip));
+          }).catch(function(e) {
+            console.warn('[done] 保存失敗:', e.message);
+          });
+
+          // ログに1行追記
+          GitHubSync.appendLog({
+            operator:    operator,
+            destination: completedItem.name,
+            productCode: completedItem.code,
+            slipNo:      completedSlip,
+            result:      'OK'
+          }).catch(function(e) {
+            console.warn('[log] 保存失敗:', e.message);
+          });
+        }
       }
     } else {
       stopLocSpeech();
@@ -856,7 +879,7 @@ scanInput.addEventListener('keydown', function(e) {
     setTimeout(function(){ scanInput.focus(); },50);
   }
 });
-// 起動時にURLからデータ読み込み
+
 if (loadFromURL()) { startScan(); }
 </script>
 </body>
