@@ -601,7 +601,7 @@ bind('btnAutoLoad', function() {
       var text;
       try {
         text = new TextDecoder('shift-jis').decode(buffer);
-        if (text.indexOf('?') !== -1) {
+        if (text.indexOf('\ufffd') !== -1) {
           text = new TextDecoder('utf-8').decode(buffer);
         }
       } catch(e) {
