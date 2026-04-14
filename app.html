@@ -502,12 +502,7 @@ function parseCSV(text) {
       var janRaw = p.length >= 8 ? p[7].trim() : '';
       var jan = '';
       if (janRaw) {
-        var janNum = Number(janRaw);
-        if (!isNaN(janNum) && janNum > 0) {
-          jan = janNum.toFixed(0);
-        } else {
-          jan = janRaw;
-        }
+        jan = janRaw;
       }
       var pname = p[4].trim();
       if (slip && /^\d+$/.test(slip)) {
