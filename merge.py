@@ -25,10 +25,12 @@ for row in azu_rows[1:]:  # ヘッダースキップ
     if len(row) < 3:
         continue
     ticket = clean(row[0])
+    code   = clean(row[1])  # 商品コード ← 追加
     slip   = clean(row[2])  # 発送伝票番号
     jan    = clean(row[3]) if len(row) >= 4 else ''
-    if ticket:
-        azu_dict[ticket] = {'slip': slip, 'jan': jan}
+    if ticket and code:
+        key = ticket + '_' + code  # ← 伝票番号＋商品コードの複合キー
+        azu_dict[key] = {'slip': slip, 'jan': jan}
 
 print(f"AZU.csv: {len(azu_dict)}件読み込み")
 
@@ -52,7 +54,7 @@ output_rows = []
 header = ['伝票番号', '送り先名', '商品コード', '受注数', '商品名', 'ロケ', '発送伝票番号', 'JAN']
 output_rows.append(header)
 
-matched = 0
+matched   = 0
 unmatched = 0
 
 for row in zac_rows:
@@ -65,8 +67,9 @@ for row in zac_rows:
     pname  = clean(row[4])
     loc    = clean(row[5])
 
-    # AZU.csvからVLOOKUP
-    azu = azu_dict.get(ticket, {})
+    # 伝票番号＋商品コードの複合キーでVLOOKUP ← 修正
+    key  = ticket + '_' + code
+    azu  = azu_dict.get(key, {})
     slip = azu.get('slip', '')
     jan  = azu.get('jan', '')
 
