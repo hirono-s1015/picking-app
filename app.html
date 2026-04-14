@@ -809,6 +809,7 @@ function processScan(val) {
         speak('正解です。次の商品があります。', function() { startLocSpeech(curItem.loc); });
         vib([50,30,50]);
         showItem(curItem, curIdx, curItems.length);
+        setClear(true); 
       } else {
         // ★ 全商品完了 → GitHub に保存
         var completedSlip = curSlip;
