@@ -1,5 +1,4 @@
 import csv
-import sys
 
 def read_csv_auto(filename):
     """Shift-JIS / UTF-8 自動判別で読み込む"""
@@ -18,38 +17,38 @@ def clean(s):
     return s.strip().strip('"').strip()
 
 # ===== AZU.csv を読み込む =====
-# 列構成: 伝票番号, 商品コード, 発送伝票番号, JANコード
 azu_rows = read_csv_auto('AZU.csv')
 azu_dict = {}
-for row in azu_rows[1:]:  # ヘッダースキップ
+for row in azu_rows[1:]:
     if len(row) < 3:
         continue
     ticket = clean(row[0])
-    code   = clean(row[1])  # 商品コード ← 追加
-    slip   = clean(row[2])  # 発送伝票番号
+    code   = clean(row[1])
+    slip   = clean(row[2])
     jan    = clean(row[3]) if len(row) >= 4 else ''
     if ticket and code:
-        key = ticket + '_' + code  # ← 伝票番号＋商品コードの複合キー
+        key = ticket + '_' + code
         azu_dict[key] = {'slip': slip, 'jan': jan}
 
 print(f"AZU.csv: {len(azu_dict)}件読み込み")
 
-# ===== ZAC1.csv + ZAC2.csv を縦結合 =====
-# 列構成: 伝票番号, 送り先名, 商品コード, 受注数, 商品名, ロケ
+# ===== ZAC1.csv〜ZAC6.csv を縦結合（存在するファイルだけ読み込む）=====
 zac_rows = []
-for filename in ('ZAC1.csv', 'ZAC2.csv'):
+for i in range(1, 7):
+    filename = f'ZAC{i}.csv'
     try:
         rows = read_csv_auto(filename)
-        data_rows = rows[1:]  # ヘッダースキップ
+        data_rows = rows[1:]
         zac_rows.extend(data_rows)
         print(f"{filename}: {len(data_rows)}件追加")
     except FileNotFoundError:
         print(f"{filename}: 見つかりません（スキップ）")
+    except Exception as e:
+        print(f"{filename}: 読み込みエラー（スキップ）: {e}")
 
 print(f"ZAC合計: {len(zac_rows)}件")
 
 # ===== 結合してZAC.csvを出力 =====
-# 出力列: 伝票番号, 送り先名, 商品コード, 受注数, 商品名, ロケ, 発送伝票番号, JAN
 output_rows = []
 header = ['伝票番号', '送り先名', '商品コード', '受注数', '商品名', 'ロケ', '発送伝票番号', 'JAN']
 output_rows.append(header)
@@ -67,7 +66,6 @@ for row in zac_rows:
     pname  = clean(row[4])
     loc    = clean(row[5])
 
-    # 伝票番号＋商品コードの複合キーでVLOOKUP ← 修正
     key  = ticket + '_' + code
     azu  = azu_dict.get(key, {})
     slip = azu.get('slip', '')
@@ -80,7 +78,6 @@ for row in zac_rows:
 
     output_rows.append([ticket, name, code, qty, pname, loc, slip, jan])
 
-# UTF-8（BOMなし）で出力
 with open('ZAC.csv', 'w', encoding='utf-8', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(output_rows)
