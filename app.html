@@ -826,24 +826,28 @@ function processScan(val) {
 
         // ★ GitHub保存（非同期・失敗してもピッキングは止めない）
         if (GitHubSync.hasToken()) {
-          // done.json に伝票番号を追加
-          GitHubSync.markDone(completedSlip).then(function() {
-            ghDoneSet.add(String(completedSlip));
-          }).catch(function(e) {
-            console.warn('[done] 保存失敗:', e.message);
-          });
+  GitHubSync.markDone(completedSlip).then(function() {
+    ghDoneSet.add(String(completedSlip));
+  }).catch(function(e) {
+    console.warn('[done] 保存失敗:', e.message);
+  });
 
-          // ログに1行追記
-          GitHubSync.appendLog({
-            operator:    operator,
-            destination: completedItem.name,
-            productCode: completedItem.code,
-            slipNo:      completedSlip,
-            result:      'OK'
-          }).catch(function(e) {
-            console.warn('[log] 保存失敗:', e.message);
-          });
-        }
+  // 全商品分ループしてログ記録
+  var allItems = curItems.slice();
+  allItems.reduce(function(promise, item) {
+    return promise.then(function() {
+      return GitHubSync.appendLog({
+        operator:    operator,
+        destination: item.name,
+        productCode: item.code,
+        slipNo:      completedSlip,
+        result:      'OK'
+      });
+    });
+  }, Promise.resolve()).catch(function(e) {
+    console.warn('[log] 保存失敗:', e.message);
+  });
+}
       }
     } else {
       stopLocSpeech();
