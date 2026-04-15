@@ -1,4 +1,5 @@
 import csv
+import os
 
 def read_csv_auto(filename):
     """Shift-JIS / UTF-8 自動判別で読み込む"""
@@ -8,7 +9,7 @@ def read_csv_auto(filename):
                 rows = list(csv.reader(f))
             print(f"{filename}: {enc}で読み込み成功 ({len(rows)}行)")
             return rows
-        except Exception as e:
+        except Exception:
             continue
     raise ValueError(f"{filename} の読み込みに失敗しました")
 
@@ -32,10 +33,9 @@ for row in azu_rows[1:]:
 
 print(f"AZU.csv: {len(azu_dict)}件読み込み")
 
-# ===== ZAC1.csv〜ZAC6.csv を縦結合（存在するファイルだけ読み込む）=====
+# ===== ZAC1.csv, ZAC2.csv を読み込む =====
 zac_rows = []
-for i in range(1, 7):
-    filename = f'ZAC{i}.csv'
+for filename in ('ZAC1.csv', 'ZAC2.csv'):
     try:
         rows = read_csv_auto(filename)
         data_rows = rows[1:]
@@ -46,16 +46,23 @@ for i in range(1, 7):
     except Exception as e:
         print(f"{filename}: 読み込みエラー（スキップ）: {e}")
 
-print(f"ZAC合計: {len(zac_rows)}件")
+print(f"ZAC新規データ合計: {len(zac_rows)}件")
 
-# ===== 結合してZAC.csvを出力 =====
-output_rows = []
+# ===== 既存のZAC.csvを読み込む（追記モード）=====
 header = ['伝票番号', '送り先名', '商品コード', '受注数', '商品名', 'ロケ', '発送伝票番号', 'JAN']
-output_rows.append(header)
+existing_rows = []
 
-matched   = 0
-unmatched = 0
+if os.path.exists('ZAC.csv'):
+    try:
+        existing_data = read_csv_auto('ZAC.csv')
+        if len(existing_data) > 1:
+            existing_rows = existing_data[1:]
+            print(f"ZAC.csv既存データ: {len(existing_rows)}件読み込み")
+    except Exception as e:
+        print(f"ZAC.csv読み込みエラー: {e}")
 
+# ===== 新規データをAZUと結合 =====
+new_output_rows = []
 for row in zac_rows:
     if len(row) < 6:
         continue
@@ -71,15 +78,36 @@ for row in zac_rows:
     slip = azu.get('slip', '')
     jan  = azu.get('jan', '')
 
-    if slip:
-        matched += 1
-    else:
-        unmatched += 1
+    new_output_rows.append([ticket, name, code, qty, pname, loc, slip, jan])
 
-    output_rows.append([ticket, name, code, qty, pname, loc, slip, jan])
+# ===== 重複処理：伝票番号＋商品コードが同じ行は新しいデータで上書き =====
+existing_dict = {}
+for row in existing_rows:
+    if len(row) < 3:
+        continue
+    t = clean(row[0])
+    c = clean(row[2])
+    existing_dict[t + '_' + c] = row
+
+new_count = 0
+update_count = 0
+for row in new_output_rows:
+    t = clean(row[0])
+    c = clean(row[2])
+    key = t + '_' + c
+    if key in existing_dict:
+        update_count += 1
+    else:
+        new_count += 1
+    existing_dict[key] = row  # 新しいデータで上書き
+
+print(f"新規追加: {new_count}件 / 更新（再印刷）: {update_count}件")
+
+# ===== ZAC.csvに出力 =====
+output_rows = [header] + list(existing_dict.values())
 
 with open('ZAC.csv', 'w', encoding='utf-8', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(output_rows)
 
-print(f"ZAC.csv出力完了: {len(output_rows)-1}件 (マッチ:{matched} 未マッチ:{unmatched})")
+print(f"ZAC.csv出力完了: {len(output_rows)-1}件")
