@@ -817,23 +817,9 @@ function processScan(val) {
         var operator = (document.getElementById('loginName').value || '').trim() || '未設定';
 
         doneSlips.add(completedSlip);
-        done.add(val);
-        curItem=null; curItems=null; curIdx=0;
-        setStatus('ok'); beep('ok'); vib([50,30,50]);
-        document.getElementById('btnFinish').style.display = 'block';
-        updateCounters();
-        if (done.size===total) setTimeout(function(){ toast('全件完了！', 3000); }, 500);
-
-        // ★ GitHub保存（非同期・失敗してもピッキングは止めない）
-        if (GitHubSync.hasToken()) {
-  GitHubSync.markDone(completedSlip).then(function() {
-    ghDoneSet.add(String(completedSlip));
-  }).catch(function(e) {
-    console.warn('[done] 保存失敗:', e.message);
-  });
-
-  // 全商品分ループしてログ記録
-  var allItems = curItems.slice();
+done.add(val);
+var allItems = curItems.slice();  // ← ここに移動！
+curItem=null; curItems=null; curIdx=0;
   allItems.reduce(function(promise, item) {
     return promise.then(function() {
       return GitHubSync.appendLog({
