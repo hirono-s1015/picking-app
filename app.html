@@ -860,6 +860,15 @@ function processScan(val) {
       beep('ng'); vib([200,50,200]);
       addLog('ng','誤: '+val+'（正: '+curItem.code+(hasJan?' / '+curItem.jan:'')+'）'); updateCounters();
       isErr=true; setClear(true);
+       if (GitHubSync.hasToken()) {
+        GitHubSync.appendLog({
+          operator:    (document.getElementById('loginName').value || '').trim() || '未設定',
+          destination: curItem.name,
+          productCode: val,
+          slipNo:      curSlip,
+          result:      'NG_商品違い'
+        }).catch(function(e) { console.warn('[log] 保存失敗:', e.message); });
+      }
     }
   }
 }
