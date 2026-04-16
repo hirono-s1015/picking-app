@@ -3,10 +3,8 @@ on:
   push:
     branches:
       - main
-    paths:
+   paths:
       - 'AZU.csv'
-      - 'ZAC1.csv'
-      - 'ZAC2.csv'
       - 'merge.py'
 jobs:
   merge-csv:
