@@ -674,7 +674,6 @@ function updateCounters() {
   if (okEl) okEl.textContent = cOk;
   var ngEl = document.getElementById('cntNg');
   if (ngEl) ngEl.textContent = cNg;
-  document.getElementById('cntLeft').textContent = total - done.size;
   document.getElementById('progFill').style.width = (total>0 ? done.size/total*100 : 0) + '%';
 }
 
