@@ -17,36 +17,16 @@ def clean(s):
     """前後の空白・引用符を除去"""
     return s.strip().strip('"').strip()
 
-# ===== AZU.csv を読み込む =====
+# ===== AZU.csv を読み込む（完成済みデータ）=====
+# 列構成: 伝票番号, 送り先名, 商品コード, 受注数, 商品名, ロケ, 発送伝票番号, JAN
 azu_rows = read_csv_auto('AZU.csv')
-azu_dict = {}
-for row in azu_rows[1:]:
-    if len(row) < 3:
+new_rows = []
+for row in azu_rows[1:]:  # ヘッダースキップ
+    if len(row) < 6:
         continue
-    ticket = clean(row[0])
-    code   = clean(row[1])
-    slip   = clean(row[2])
-    jan    = clean(row[3]) if len(row) >= 4 else ''
-    if ticket and code:
-        key = ticket + '_' + code
-        azu_dict[key] = {'slip': slip, 'jan': jan}
+    new_rows.append([clean(c) for c in row])
 
-print(f"AZU.csv: {len(azu_dict)}件読み込み")
-
-# ===== ZAC1.csv, ZAC2.csv を読み込む =====
-zac_rows = []
-for filename in ('ZAC1.csv', 'ZAC2.csv'):
-    try:
-        rows = read_csv_auto(filename)
-        data_rows = rows[1:]
-        zac_rows.extend(data_rows)
-        print(f"{filename}: {len(data_rows)}件追加")
-    except FileNotFoundError:
-        print(f"{filename}: 見つかりません（スキップ）")
-    except Exception as e:
-        print(f"{filename}: 読み込みエラー（スキップ）: {e}")
-
-print(f"ZAC新規データ合計: {len(zac_rows)}件")
+print(f"AZU.csv新規データ: {len(new_rows)}件読み込み")
 
 # ===== 既存のZAC.csvを読み込む（追記モード）=====
 header = ['伝票番号', '送り先名', '商品コード', '受注数', '商品名', 'ロケ', '発送伝票番号', 'JAN']
@@ -61,47 +41,34 @@ if os.path.exists('ZAC.csv'):
     except Exception as e:
         print(f"ZAC.csv読み込みエラー: {e}")
 
-# ===== 新規データをAZUと結合 =====
-new_output_rows = []
-for row in zac_rows:
-    if len(row) < 6:
-        continue
-    ticket = clean(row[0])
-    name   = clean(row[1])
-    code   = clean(row[2])
-    qty    = clean(row[3])
-    pname  = clean(row[4])
-    loc    = clean(row[5])
-
-    key  = ticket + '_' + code
-    azu  = azu_dict.get(key, {})
-    slip = azu.get('slip', '')
-    jan  = azu.get('jan', '')
-
-    new_output_rows.append([ticket, name, code, qty, pname, loc, slip, jan])
-
-# ===== 重複処理：伝票番号＋商品コードが同じ行は新しいデータで上書き =====
+# ===== 重複処理：伝票番号＋商品コード＋発送伝票番号をキーに新しいデータで上書き =====
+# キー：伝票番号_商品コード_発送伝票番号（再印刷で発送伝票番号が変わっても別行として扱う）
 existing_dict = {}
 for row in existing_rows:
     if len(row) < 3:
         continue
-    t = clean(row[0])
-    c = clean(row[2])
-    existing_dict[t + '_' + c] = row
+    ticket = clean(row[0])
+    code   = clean(row[2])
+    slip   = clean(row[6]) if len(row) >= 7 else ''
+    key = ticket + '_' + code + '_' + slip
+    existing_dict[key] = row
 
 new_count = 0
 update_count = 0
-for row in new_output_rows:
-    t = clean(row[0])
-    c = clean(row[2])
-    key = t + '_' + c
+for row in new_rows:
+    if len(row) < 3:
+        continue
+    ticket = clean(row[0])
+    code   = clean(row[2])
+    slip   = clean(row[6]) if len(row) >= 7 else ''
+    key = ticket + '_' + code + '_' + slip
     if key in existing_dict:
         update_count += 1
     else:
         new_count += 1
-    existing_dict[key] = row  # 新しいデータで上書き
+    existing_dict[key] = row
 
-print(f"新規追加: {new_count}件 / 更新（再印刷）: {update_count}件")
+print(f"新規追加: {new_count}件 / 更新: {update_count}件")
 
 # ===== ZAC.csvに出力 =====
 output_rows = [header] + list(existing_dict.values())
