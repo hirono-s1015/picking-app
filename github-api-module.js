@@ -269,12 +269,12 @@ function toBase64Bom(str) {
       try {
         const existing = await getFile(TODAY_LOG);
         let newContent, sha;
-      if (existing) {
- const old = fromBase64(existing.content).replace(/^\uFEFF/, '');
-  newContent = toBase64Bom(old + rowCRLF);
+  if (existing) {
+  const old = fromBase64ShiftJIS(existing.content);
+  newContent = toBase64ShiftJIS(old + rowCRLF);
   sha = existing.sha;
 } else {
-  newContent = toBase64Bom(CSV_HEADER_CRLF + rowCRLF);  // 新規作成時のみBOM付き
+  newContent = toBase64ShiftJIS(CSV_HEADER_CRLF + rowCRLF);
   sha = undefined;
 }
         await putFile(TODAY_LOG, newContent, sha, `[today-log] ${entry.slipNo}`);
