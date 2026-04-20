@@ -1,25 +1,23 @@
 // ============================================================
 //  GitHub API 連携モジュール for WMS AZU ピッキングアプリ
-//  - ① ピッキングログを log_YYYY_MM.csv に追記
+//  - ① ピッキングログを log_YYYY_MM.csv に追記（月次・UTF-8）
+//  - ① 本日分ログを logs/log.csv に追記（Shift-JIS・CR+LF・OKのみ）
 //  - ② 完了済み伝票を done.json に保存・読み込み（多端末共有）
 // ============================================================
 
 const GitHubSync = (() => {
 
-  // ─── 設定（アプリ側で上書き可能）─────────────────────────
   const CONFIG = {
     owner:  'hirono-s1015',
     repo:   'picking-app',
     branch: 'main',
-    token:  '',   // アプリのSettings画面で設定・localStorageに保存
+    token:  '',
   };
 
-  // localStorageキー
-  const LS_TOKEN    = 'gh_pat';
-  const LS_DONE     = 'done_local_cache';
-  const LS_LOG_QUEUE = 'log_queue';   // オフライン時の退避バッファ
+  const LS_TOKEN     = 'gh_pat';
+  const LS_DONE      = 'done_local_cache';
+  const LS_LOG_QUEUE = 'log_queue';
 
-  // ─── 初期化 ───────────────────────────────────────────────
   function init() {
     CONFIG.token = localStorage.getItem(LS_TOKEN) || '';
   }
@@ -33,39 +31,23 @@ const GitHubSync = (() => {
     return CONFIG.token.length > 0;
   }
 
-  // ─── 共通: GitHub Contents API GET ───────────────────────
+  // ─── GitHub Contents API GET ──────────────────────────────
   async function getFile(path) {
     const url = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}&t=${Date.now()}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${CONFIG.token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    if (res.status === 404) return null;          // ファイル未存在
+    const res = await fetch(url, { headers: authHeaders() });
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GitHub GET failed: ${res.status}`);
-    return await res.json();                       // { sha, content(base64), ... }
+    return await res.json();
   }
 
-  // ─── 共通: GitHub Contents API PUT（作成 or 上書き）───────
+  // ─── GitHub Contents API PUT ──────────────────────────────
   async function putFile(path, contentBase64, sha, commitMsg) {
     const url = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}`;
-    const body = {
-      message: commitMsg,
-      content: contentBase64,
-      branch:  CONFIG.branch,
-    };
-    if (sha) body.sha = sha;   // 既存ファイルの更新には sha が必要
-
+    const body = { message: commitMsg, content: contentBase64, branch: CONFIG.branch };
+    if (sha) body.sha = sha;
     const res = await fetch(url, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${CONFIG.token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json',
-      },
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -75,19 +57,118 @@ const GitHubSync = (() => {
     return await res.json();
   }
 
+  function authHeaders() {
+    return {
+      Authorization: `Bearer ${CONFIG.token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+  }
+
   // ─── ユーティリティ ───────────────────────────────────────
+  // UTF-8 → base64
   function toBase64(str) {
-    // UTF-8 → base64（GitHub API は UTF-8 base64）
     const bytes = new TextEncoder().encode(str);
     let bin = '';
     bytes.forEach(b => bin += String.fromCharCode(b));
     return btoa(bin);
   }
 
+  // Shift-JIS → base64（encoding.jsなしで対応）
+  function toBase64ShiftJIS(str) {
+    // Shift-JIS変換テーブルを使って変換
+    const sjisArray = unicodeToSjisBytes(str);
+    let bin = '';
+    sjisArray.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin);
+  }
+
+  // Unicode文字列をShift-JISバイト列に変換
+  function unicodeToSjisBytes(str) {
+    // TextEncoderでShift-JISが使えるブラウザ環境では直接変換
+    // 使えない場合はUTF-8にフォールバック
+    try {
+      const encoder = new TextEncoder('shift-jis');
+      // 標準のTextEncoderはUTF-8のみ対応のため、
+      // Blobを使ってShift-JIS変換を行う
+      const bytes = [];
+      for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code < 0x80) {
+          bytes.push(code);
+        } else if (code === 0x00A5) {
+          bytes.push(0x5C); // ¥ → \
+        } else if (code === 0x203E) {
+          bytes.push(0x7E); // ‾ → ~
+        } else if (code >= 0xFF61 && code <= 0xFF9F) {
+          // 半角カタカナ
+          bytes.push(code - 0xFF61 + 0xA1);
+        } else if (code >= 0x0391 && code <= 0x0451) {
+          bytes.push(0x3F); // ? (未対応)
+        } else {
+          // 全角文字のShift-JIS変換（主要な文字のみ）
+          const sjis = unicodeCharToSjis(code);
+          if (sjis > 0xFF) {
+            bytes.push((sjis >> 8) & 0xFF);
+            bytes.push(sjis & 0xFF);
+          } else if (sjis > 0) {
+            bytes.push(sjis);
+          } else {
+            bytes.push(0x3F); // ?
+          }
+        }
+      }
+      return bytes;
+    } catch(e) {
+      // フォールバック：UTF-8
+      const utf8bytes = new TextEncoder().encode(str);
+      return Array.from(utf8bytes);
+    }
+  }
+
+  // 主要なUnicode→Shift-JIS変換
+  function unicodeCharToSjis(code) {
+    // ひらがな (U+3041-U+3096)
+    if (code >= 0x3041 && code <= 0x3096) {
+      const offset = code - 0x3041;
+      const row = Math.floor(offset / 94);
+      const col = offset % 94;
+      const sjisRow = row < 62 ? row + 0x20 : row + 0x40;
+      const sjisHigh = Math.floor(sjisRow / 2) + (sjisRow < 0x3F ? 0x70 : 0xB0);
+      const sjisLow = sjisRow % 2 === 0
+        ? col + 0x40 + (col >= 0x3F ? 1 : 0)
+        : col + 0x9E;
+      return (sjisHigh << 8) | sjisLow;
+    }
+    // カタカナ (U+30A1-U+30F6)
+    if (code >= 0x30A1 && code <= 0x30F6) {
+      const offset = code - 0x30A1;
+      const row = Math.floor(offset / 94) + 5;
+      const col = offset % 94;
+      const sjisRow = row < 62 ? row + 0x20 : row + 0x40;
+      const sjisHigh = Math.floor(sjisRow / 2) + (sjisRow < 0x3F ? 0x70 : 0xB0);
+      const sjisLow = sjisRow % 2 === 0
+        ? col + 0x40 + (col >= 0x3F ? 1 : 0)
+        : col + 0x9E;
+      return (sjisHigh << 8) | sjisLow;
+    }
+    return 0;
+  }
+
   function fromBase64(b64) {
     const bin = atob(b64.replace(/\n/g, ''));
     const bytes = new Uint8Array([...bin].map(c => c.charCodeAt(0)));
     return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  function fromBase64ShiftJIS(b64) {
+    const bin = atob(b64.replace(/\n/g, ''));
+    const bytes = new Uint8Array([...bin].map(c => c.charCodeAt(0)));
+    try {
+      return new TextDecoder('shift-jis').decode(bytes);
+    } catch(e) {
+      return new TextDecoder('utf-8').decode(bytes);
+    }
   }
 
   function nowJST() {
@@ -106,21 +187,20 @@ const GitHubSync = (() => {
     return `logs/log_${y}_${m}.csv`;
   }
 
-  // CSV の1行をエスケープして生成
-  function csvRow(fields) {
-    return fields.map(f => {
+  // CSV行生成（LF）
+  function csvRow(fields, crlf) {
+    const line = fields.map(f => {
       const s = String(f ?? '');
       return s.includes(',') || s.includes('"') || s.includes('\n')
         ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(',') + '\n';
+    }).join(',');
+    return line + (crlf ? '\r\n' : '\n');
   }
 
-  const CSV_HEADER = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\n';
+  const CSV_HEADER_LF   = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\n';
+  const CSV_HEADER_CRLF = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\r\n';
 
-  // ─── ① ログ追記 ──────────────────────────────────────────
-  /**
-   * @param {Object} entry  { operator, destination, productCode, slipNo, result }
-   */
+  // ─── ① 月次ログ追記（UTF-8・LF）────────────────────────
   async function appendLog(entry) {
     if (!hasToken()) throw new Error('GitHub Token が未設定です');
 
@@ -131,34 +211,69 @@ const GitHubSync = (() => {
       entry.productCode || '',
       entry.slipNo      || '',
       entry.result      || 'OK',
-    ]);
+    ], false);
 
-    // リトライ付き（sha競合対策）
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const path = logFileName();
         const existing = await getFile(path);
-
         let newContent, sha;
         if (existing) {
           const old = fromBase64(existing.content);
           newContent = toBase64(old + row);
           sha = existing.sha;
         } else {
-          newContent = toBase64(CSV_HEADER + row);
+          newContent = toBase64(CSV_HEADER_LF + row);
           sha = undefined;
         }
-
         await putFile(path, newContent, sha, `[log] ${entry.slipNo} ${entry.result}`);
-        _flushQueue();   // オフライン退避ログも送信試行
-        return { ok: true };
+        _flushQueue();
 
+        // OKの場合のみ本日分ログにも追記
+        if ((entry.result || 'OK') === 'OK') {
+          appendTodayLog(entry, row).catch(e => console.warn('[today-log]', e.message));
+        }
+
+        return { ok: true };
       } catch (e) {
         if (attempt === 2 || !e.message.includes('409')) {
-          // 3回失敗またはsha競合以外 → キューに退避
           _enqueue(row);
           throw e;
         }
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+  }
+
+  // ─── 本日分ログ追記（Shift-JIS・CR+LF・OKのみ）──────────
+  async function appendTodayLog(entry, rowLF) {
+    const TODAY_LOG = 'logs/log.csv';
+    // CR+LF版の行を生成
+    const rowCRLF = csvRow([
+      nowJST(),
+      entry.operator    || '',
+      entry.destination || '',
+      entry.productCode || '',
+      entry.slipNo      || '',
+      entry.result      || 'OK',
+    ], true);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const existing = await getFile(TODAY_LOG);
+        let newContent, sha;
+        if (existing) {
+          const old = fromBase64ShiftJIS(existing.content);
+          newContent = toBase64ShiftJIS(old + rowCRLF);
+          sha = existing.sha;
+        } else {
+          newContent = toBase64ShiftJIS(CSV_HEADER_CRLF + rowCRLF);
+          sha = undefined;
+        }
+        await putFile(TODAY_LOG, newContent, sha, `[today-log] ${entry.slipNo}`);
+        return { ok: true };
+      } catch (e) {
+        if (attempt === 2 || !e.message.includes('409')) throw e;
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
       }
     }
@@ -180,18 +295,13 @@ const GitHubSync = (() => {
       const rows = q.join('');
       const newContent = existing
         ? toBase64(fromBase64(existing.content) + rows)
-        : toBase64(CSV_HEADER + rows);
+        : toBase64(CSV_HEADER_LF + rows);
       await putFile(path, newContent, existing?.sha, `[log-flush] ${q.length}件`);
       localStorage.removeItem(LS_LOG_QUEUE);
-    } catch (_) { /* 次回再試行 */ }
+    } catch (_) {}
   }
 
   // ─── ② done.json 読み込み ────────────────────────────────
-  /**
-   * GitHub から done.json を取得し、完了済み伝票番号セットを返す
-   * キャッシュを localStorageに保持しオフライン時はそちらを利用
-   * @returns {Set<string>}
-   */
   async function loadDone() {
     try {
       const file = await getFile('done.json');
@@ -200,43 +310,28 @@ const GitHubSync = (() => {
         return new Set();
       }
       const json = fromBase64(file.content);
-      localStorage.setItem(LS_DONE, json);   // キャッシュ更新
+      localStorage.setItem(LS_DONE, json);
       return new Set(JSON.parse(json));
     } catch (_) {
-      // オフライン時：キャッシュを使う
       const cached = localStorage.getItem(LS_DONE);
       return new Set(cached ? JSON.parse(cached) : []);
     }
   }
 
   // ─── ② done.json 追記 ────────────────────────────────────
-  /**
-   * @param {string} slipNo 伝票番号
-   */
   async function markDone(slipNo) {
     if (!hasToken()) throw new Error('GitHub Token が未設定です');
-
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const file = await getFile('done.json');
-        let list = [];
-        let sha;
-
-        if (file) {
-          list = JSON.parse(fromBase64(file.content));
-          sha  = file.sha;
-        }
-
+        let list = [], sha;
+        if (file) { list = JSON.parse(fromBase64(file.content)); sha = file.sha; }
         if (list.includes(slipNo)) return { ok: true, already: true };
-
         list.push(slipNo);
         const newContent = toBase64(JSON.stringify(list, null, 2) + '\n');
         await putFile('done.json', newContent, sha, `[done] ${slipNo}`);
-
-        // ローカルキャッシュも更新
         localStorage.setItem(LS_DONE, JSON.stringify(list));
         return { ok: true };
-
       } catch (e) {
         if (attempt === 2 || !e.message.includes('409')) throw e;
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
@@ -248,10 +343,6 @@ const GitHubSync = (() => {
   let _pollTimer = null;
   let _onDoneUpdate = null;
 
-  /**
-   * @param {Function} callback  (doneSet: Set<string>) => void
-   * @param {number}   intervalMs  ポーリング間隔（デフォルト30秒）
-   */
   function startPolling(callback, intervalMs = 30_000) {
     _onDoneUpdate = callback;
     if (_pollTimer) clearInterval(_pollTimer);
@@ -267,14 +358,13 @@ const GitHubSync = (() => {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   }
 
-  // ─── 公開API ─────────────────────────────────────────────
   return { init, setToken, hasToken, appendLog, loadDone, markDone, startPolling, stopPolling };
 
 })();
 
 
 // ============================================================
-//  Settings UI  ─  既存アプリに差し込む設定パネル
+//  Settings UI
 // ============================================================
 
 const GitHubSettingsUI = (() => {
@@ -295,7 +385,7 @@ const GitHubSettingsUI = (() => {
           必要な権限：<code>Contents: Read and write</code>
         </p>
         <label style="font-size:13px;font-weight:600;color:#333">GitHub PAT</label>
-        <input id="gh-pat-input" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        <input id="gh-pat-input" type="password" placeholder="github_pat_xxxxxxxxxxxxxxxxxxxx"
           style="width:100%;box-sizing:border-box;margin-top:6px;padding:10px 12px;
                  border:1.5px solid #ddd;border-radius:8px;font-size:14px;outline:none"/>
         <div id="gh-pat-msg" style="min-height:20px;margin-top:8px;font-size:13px;color:#c0392b"></div>
@@ -318,12 +408,11 @@ const GitHubSettingsUI = (() => {
 
     document.body.appendChild(div);
 
-    const input  = div.querySelector('#gh-pat-input');
-    const msg    = div.querySelector('#gh-pat-msg');
-    const btnSave= div.querySelector('#gh-pat-save');
-    const btnCan = div.querySelector('#gh-pat-cancel');
+    const input   = div.querySelector('#gh-pat-input');
+    const msg     = div.querySelector('#gh-pat-msg');
+    const btnSave = div.querySelector('#gh-pat-save');
+    const btnCan  = div.querySelector('#gh-pat-cancel');
 
-    // 既存トークンを表示
     const existing = localStorage.getItem('gh_pat');
     if (existing) input.value = existing;
 
@@ -334,16 +423,14 @@ const GitHubSettingsUI = (() => {
       btnSave.textContent = '確認中…';
       msg.style.color = '#666';
       msg.textContent = 'GitHub API に接続確認中…';
-
       try {
-        // token を一時適用して接続テスト（リポジトリ情報取得）
         GitHubSync.setToken(val);
         await GitHubSync.loadDone();
         msg.style.color = '#27ae60';
         msg.textContent = '✅ 接続成功！';
         setTimeout(() => div.remove(), 900);
       } catch (e) {
-        GitHubSync.setToken('');   // 失敗時はリセット
+        GitHubSync.setToken('');
         msg.style.color = '#c0392b';
         msg.textContent = `❌ 接続失敗: ${e.message}`;
         btnSave.disabled = false;
