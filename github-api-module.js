@@ -83,12 +83,12 @@ function toBase64Bom(str) {
   return btoa(bin);
 }
   function toBase64ShiftJIS(str) {
-    // Shift-JIS変換テーブルを使って変換
-    const sjisArray = unicodeToSjisBytes(str);
-    let bin = '';
-    sjisArray.forEach(b => bin += String.fromCharCode(b));
-    return btoa(bin);
-  }
+  const unicodeArray = Encoding.stringToCode(str);
+  const sjisArray = Encoding.convert(unicodeArray, 'SJIS', 'UNICODE');
+  let bin = '';
+  sjisArray.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
 
   // Unicode文字列をShift-JISバイト列に変換
   function unicodeToSjisBytes(str) {
