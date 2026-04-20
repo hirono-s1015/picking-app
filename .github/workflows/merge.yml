@@ -23,4 +23,4 @@ jobs:
           git add ZAC.csv
           git diff --staged --quiet || git commit -m "ZAC.csv auto update"
           git pull --rebase origin main
-          git push
+          git push || (git pull --rebase origin main && git push)
