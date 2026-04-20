@@ -74,7 +74,14 @@ const GitHubSync = (() => {
     return btoa(bin);
   }
 
-  // Shift-JIS → base64（encoding.jsなしで対応）
+ // UTF-8 BOM付き → base64
+function toBase64Bom(str) {
+  const bom = '\uFEFF';
+  const bytes = new TextEncoder().encode(bom + str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
   function toBase64ShiftJIS(str) {
     // Shift-JIS変換テーブルを使って変換
     const sjisArray = unicodeToSjisBytes(str);
