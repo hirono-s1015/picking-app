@@ -230,9 +230,9 @@ function toBase64Bom(str) {
           newContent = toBase64(old + row);
           sha = existing.sha;
         } else {
-          newContent = toBase64(CSV_HEADER_LF + row);
-          sha = undefined;
-        }
+  newContent = toBase64Bom(CSV_HEADER_CRLF.replace(/^\uFEFF/, '') + rowCRLF);
+  sha = undefined;
+}
         await putFile(path, newContent, sha, `[log] ${entry.slipNo} ${entry.result}`);
         _flushQueue();
 
