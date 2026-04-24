@@ -807,15 +807,25 @@ function processScan(val) {
       beep('error'); vib([100,50,100]);
       cNg++; addLog('ng','伝票未登録: '+val); updateCounters();
       isErr=true; setClear(true);
-       if (GitHubSync.hasToken()) {
-        GitHubSync.appendLog({
-          operator:    (document.getElementById('loginName').value || '').trim() || '未設定',
-          destination: '',
-          productCode: val,
-          slipNo:      val,
-          result:      'NG_伝票未登録'
-        }).catch(function(e) { console.warn('[log] 保存失敗:', e.message); });
-      }
+     if (GitHubSync.hasToken()) {
+  GitHubSync.markDone(completedSlip).then(function() {
+    ghDoneSet.add(String(completedSlip));
+  }).catch(function(e) {
+    console.warn('[done] 保存失敗:', e.message);
+  });
+
+  // ログはキューに溜める
+  if (!window._pendingLogs) window._pendingLogs = [];
+  allItems.forEach(function(item) {
+    window._pendingLogs.push({
+      operator:    operator,
+      destination: item.name,
+      productCode: item.code,
+      slipNo:      completedSlip,
+      result:      'OK'
+    });
+  });
+}
     }
   } else {
     // 商品スキャン照合
