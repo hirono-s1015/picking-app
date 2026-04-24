@@ -651,6 +651,20 @@ function loadFromURL() {
 // ===== FINISH =====
 bind('btnFinish', function() {
   speak('お疲れ様でした');
+
+  // ★ 終了時にまとめてログ送信
+  if (GitHubSync.hasToken() && window._pendingLogs && window._pendingLogs.length > 0) {
+    var logs = window._pendingLogs.slice();
+    window._pendingLogs = [];
+    logs.reduce(function(promise, entry) {
+      return promise.then(function() {
+        return GitHubSync.appendLog(entry);
+      });
+    }, Promise.resolve()).catch(function(e) {
+      console.warn('[log] 送信失敗:', e.message);
+    });
+  }
+
   setTimeout(function() {
     db={}; curItem=null; curItems=null; curIdx=0; curSlip='';
     cOk=0; cNg=0; done=new Set(); doneSlips=new Set(); isErr=false;
