@@ -652,17 +652,19 @@ function loadFromURL() {
 bind('btnFinish', function() {
   speak('お疲れ様でした');
 
-  // ★ 終了時にまとめてログ送信
-  if (GitHubSync.hasToken() && window._pendingLogs && window._pendingLogs.length > 0) {
-    var logs = window._pendingLogs.slice();
-    window._pendingLogs = [];
-    logs.reduce(function(promise, entry) {
-      return promise.then(function() {
-        return GitHubSync.appendLog(entry);
+ // ★ 終了時にlocalStorageからキューを読み込んで送信
+  if (GitHubSync.hasToken()) {
+    var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
+    if (queue.length > 0) {
+      localStorage.removeItem('pending_logs');
+      queue.reduce(function(promise, entry) {
+        return promise.then(function() {
+          return GitHubSync.appendLog(entry);
+        });
+      }, Promise.resolve()).catch(function(e) {
+        console.warn('[log] 送信失敗:', e.message);
       });
-    }, Promise.resolve()).catch(function(e) {
-      console.warn('[log] 送信失敗:', e.message);
-    });
+    }
   }
 
   setTimeout(function() {
