@@ -814,10 +814,10 @@ function processScan(val) {
     console.warn('[done] 保存失敗:', e.message);
   });
 
-  // ログはキューに溜める
-  if (!window._pendingLogs) window._pendingLogs = [];
+ // ログはlocalStorageのキューに溜める
+  var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
   allItems.forEach(function(item) {
-    window._pendingLogs.push({
+    queue.push({
       operator:    operator,
       destination: item.name,
       productCode: item.code,
@@ -825,6 +825,7 @@ function processScan(val) {
       result:      'OK'
     });
   });
+  localStorage.setItem('pending_logs', JSON.stringify(queue));
 }
     }
   } else {
