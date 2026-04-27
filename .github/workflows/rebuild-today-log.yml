@@ -1,0 +1,88 @@
+name: 本日ログ更新
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '対象日（空白=今日） 例: 2026-04-27'
+        required: false
+        default: ''
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 本日ログを月次ログから再構築
+        env:
+          TZ: Asia/Tokyo
+        run: |
+          python3 - <<'PYEOF'
+          import os, csv, io, datetime
+
+          # 対象日を決定（入力があればそれを使う）
+          target_date = os.environ.get('TARGET_DATE', '').strip()
+          if not target_date:
+              target_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%d')
+          print(f"対象日: {target_date}")
+
+          # 月次ログのパス
+          year_month = target_date[:7].replace('-', '_')   # 例: 2026_04
+          monthly_path = f"logs/log_{year_month}.csv"
+          today_path   = "logs/log.csv"
+
+          if not os.path.exists(monthly_path):
+              print(f"月次ログが見つかりません: {monthly_path}")
+              exit(0)
+
+          # 月次ログを読み込み（UTF-8 / BOM付きUTF-8 両対応）
+          with open(monthly_path, encoding='utf-8-sig', newline='') as f:
+              reader = csv.reader(f)
+              rows = list(reader)
+
+          if not rows:
+              print("月次ログが空です")
+              exit(0)
+
+          header = rows[0]
+          # 今日の日付で始まる行 かつ 結果列が OK のものだけ抽出
+          today_rows = [
+              r for r in rows[1:]
+              if r and r[0].strip().startswith(target_date) and (len(r) < 6 or r[5].strip() == 'OK')
+          ]
+          print(f"抽出件数: {len(today_rows)} 件")
+
+          # log.csv を BOM付きUTF-8・CRLF で書き出し
+          out = io.StringIO()
+          writer = csv.writer(out, lineterminator='\r\n')
+          writer.writerow(header)
+          writer.writerows(today_rows)
+
+          os.makedirs('logs', exist_ok=True)
+          with open(today_path, 'w', encoding='utf-8-sig', newline='') as f:
+              f.write(out.getvalue())
+
+          print(f"{today_path} を更新しました（{len(today_rows)} 件）")
+          PYEOF
+
+      - name: コミット & プッシュ
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/log.csv
+          if git diff --cached --quiet; then
+            echo "変更なし。スキップします。"
+          else
+            COUNT=$(python3 -c "
+          import csv
+          with open('logs/log.csv', encoding='utf-8-sig') as f:
+              print(sum(1 for _ in csv.reader(f)) - 1)
+          ")
+            git commit -m "[today-log] ${COUNT}件"
+            git push
+            echo "✅ log.csv を更新しました（${COUNT}件）"
+          fi
+        env:
+          TARGET_DATE: ${{ github.event.inputs.date }}
