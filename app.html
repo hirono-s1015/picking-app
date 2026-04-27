@@ -283,7 +283,7 @@ body.wait .status-card { border-color: rgba(255,255,255,0.15); background: #2d2d
     <div class="page-title">ピッキング開始</div>
     <div style="display:flex;flex-direction:column;gap:6px;">
       <label style="font-size:13px;color:var(--muted);">担当者名</label>
-      <input type="text" id="loginName" placeholder="名前を入力 またはスキャン"
+      <input type="text" id="loginName" placeholder="3ケタの数字をスキャン"
         style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.15);border-radius:12px;color:var(--text);font-size:16px;padding:14px 16px;outline:none;-webkit-appearance:none;">
     </div>
     <a class="btn-main" id="btnAutoLoad" href="javascript:void(0)">ピッキング開始 ▶</a>
@@ -396,6 +396,7 @@ GitHubSync.loadDone().then(function(s) {
 GitHubSync.startPolling(function(newSet) {
   ghDoneSet = newSet;
 }, 30000);
+
 
 // ===== AUDIO (音声読み上げ) =====
 var locSpeechTimer = null;
@@ -577,7 +578,12 @@ var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/Z
 bind('btnAutoLoad', function() {
   var name = (document.getElementById('loginName').value || '').trim();
   if (!name) {
-    toast('担当者名を入力してください');
+    toast('担当者名（3ケタの数字）を入力してください');
+    document.getElementById('loginName').focus();
+    return;
+  }
+  if (!/^\d{3}$/.test(name)) {
+    toast('担当者名は3ケタの数字で入力してください');
     document.getElementById('loginName').focus();
     return;
   }
@@ -651,22 +657,6 @@ function loadFromURL() {
 // ===== FINISH =====
 bind('btnFinish', function() {
   speak('お疲れ様でした');
-
- // ★ 終了時にlocalStorageからキューを読み込んで送信
-  if (GitHubSync.hasToken()) {
-    var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
-    if (queue.length > 0) {
-      localStorage.removeItem('pending_logs');
-      queue.reduce(function(promise, entry) {
-        return promise.then(function() {
-          return GitHubSync.appendLog(entry);
-        });
-      }, Promise.resolve()).catch(function(e) {
-        console.warn('[log] 送信失敗:', e.message);
-      });
-    }
-  }
-
   setTimeout(function() {
     db={}; curItem=null; curItems=null; curIdx=0; curSlip='';
     cOk=0; cNg=0; done=new Set(); doneSlips=new Set(); isErr=false;
@@ -809,26 +799,15 @@ function processScan(val) {
       beep('error'); vib([100,50,100]);
       cNg++; addLog('ng','伝票未登録: '+val); updateCounters();
       isErr=true; setClear(true);
-     if (GitHubSync.hasToken()) {
-  GitHubSync.markDone(completedSlip).then(function() {
-    ghDoneSet.add(String(completedSlip));
-  }).catch(function(e) {
-    console.warn('[done] 保存失敗:', e.message);
-  });
-
- // ログはlocalStorageのキューに溜める
-  var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
-  allItems.forEach(function(item) {
-    queue.push({
-      operator:    operator,
-      destination: item.name,
-      productCode: item.code,
-      slipNo:      completedSlip,
-      result:      'OK'
-    });
-  });
-  localStorage.setItem('pending_logs', JSON.stringify(queue));
-}
+       if (GitHubSync.hasToken()) {
+        GitHubSync.appendLog({
+          operator:    (document.getElementById('loginName').value || '').trim() || '未設定',
+          destination: '',
+          productCode: val,
+          slipNo:      val,
+          result:      'NG_伝票未登録'
+        }).catch(function(e) { console.warn('[log] 保存失敗:', e.message); });
+      }
     }
   } else {
     // 商品スキャン照合
