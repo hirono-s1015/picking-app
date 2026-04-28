@@ -236,10 +236,7 @@ function toBase64Bom(str) {
         await putFile(path, newContent, sha, `[log] ${entry.slipNo} ${entry.result}`);
         _flushQueue();
 
-        // OKの場合のみ本日分ログにも追記
-        if ((entry.result || 'OK') === 'OK') {
-          appendTodayLog(entry, row).catch(e => console.warn('[today-log]', e.message));
-        }
+        
 
         return { ok: true };
       } catch (e) {
