@@ -568,6 +568,12 @@ function startScan() {
 document.getElementById('loginName').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' || e.keyCode === 13) {
     e.preventDefault();
+    clearTimeout(loginTmr);
+    var v = document.getElementById('loginName').value.trim();
+    if (!/^\d{3}$/.test(v)) {
+      toast('担当者名は3ケタの数字で入力してください');
+      return;
+    }
     document.getElementById('btnAutoLoad').click();
   }
 });
