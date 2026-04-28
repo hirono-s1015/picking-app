@@ -572,6 +572,19 @@ document.getElementById('loginName').addEventListener('keydown', function(e) {
   }
 });
 
+// スキャナ対応：入力が止まったら自動でボタンを押す（3ケタになった瞬間に起動）
+var loginTmr;
+document.getElementById('loginName').addEventListener('input', function() {
+  clearTimeout(loginTmr);
+  var v = this.value.trim();
+  if (!v) return;
+  // 3ケタ数字が揃ったら即実行、それ以外は300ms待って実行
+  var delay = /^\d{3}$/.test(v) ? 0 : 300;
+  loginTmr = setTimeout(function() {
+    document.getElementById('btnAutoLoad').click();
+  }, delay);
+});
+
 // ===== AUTO LOAD FROM GITHUB =====
 var CSV_URL = 'https://raw.githubusercontent.com/hirono-s1015/picking-app/main/ZAC.csv';
 
