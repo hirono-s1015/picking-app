@@ -872,19 +872,18 @@ function processScan(val) {
           }).catch(function(e) {
             console.warn('[done] 保存失敗:', e.message);
           });
-          allItems.reduce(function(promise, item) {
-            return promise.then(function() {
-              return GitHubSync.appendLog({
-                operator:    operator,
-                destination: item.name,
-                productCode: item.code,
-                slipNo:      completedSlip,
-                result:      'OK'
-              });
+          // ログはlocalStorageのキューに溜める
+          var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
+          allItems.forEach(function(item) {
+            queue.push({
+              operator:    operator,
+              destination: item.name,
+              productCode: item.code,
+              slipNo:      completedSlip,
+              result:      'OK'
             });
-          }, Promise.resolve()).catch(function(e) {
-            console.warn('[log] 保存失敗:', e.message);
           });
+          localStorage.setItem('pending_logs', JSON.stringify(queue));
         }
       }
     } else {
