@@ -865,18 +865,26 @@ function processScan(val) {
           }).catch(function(e) {
             console.warn('[done] 保存失敗:', e.message);
           });
-          // ログはlocalStorageのキューに溜める
-          var queue = JSON.parse(localStorage.getItem('pending_logs') || '[]');
+        // スキャン時刻を記録して即時送信
+          var scanTime = new Intl.DateTimeFormat('ja-JP', {
+            timeZone: 'Asia/Tokyo',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false,
+          }).format(new Date()).replace(/\//g, '-');
+
           allItems.forEach(function(item) {
-            queue.push({
+            GitHubSync.appendLog({
               operator:    operator,
               destination: item.name,
               productCode: item.code,
               slipNo:      completedSlip,
-              result:      'OK'
+              result:      'OK',
+              scanTime:    scanTime
+            }).catch(function(e) {
+              console.warn('[log] 保存失敗:', e.message);
             });
           });
-          localStorage.setItem('pending_logs', JSON.stringify(queue));
         }
       }
     } else {
