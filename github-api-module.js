@@ -1,7 +1,6 @@
 // ============================================================
 //  GitHub API 連携モジュール for WMS AZU ピッキングアプリ
-//  - ① ピッキングログを log_YYYY_MM.csv に追記（月次・UTF-8）
-//  - ① 本日分ログを logs/log.csv に追記（Shift-JIS・CR+LF・OKのみ）
+//  - ① ピッキングログを log_YYYY_MM_担当者番号.csv に即時追記
 //  - ② 完了済み伝票を done.json に保存・読み込み（多端末共有）
 // ============================================================
 
@@ -66,7 +65,6 @@ const GitHubSync = (() => {
   }
 
   // ─── ユーティリティ ───────────────────────────────────────
-  // UTF-8 → base64
   function toBase64(str) {
     const bytes = new TextEncoder().encode(str);
     let bin = '';
@@ -74,108 +72,10 @@ const GitHubSync = (() => {
     return btoa(bin);
   }
 
- // UTF-8 BOM付き → base64
-function toBase64Bom(str) {
-  const bom = '\uFEFF';
-  const bytes = new TextEncoder().encode(bom + str);
-  let bin = '';
-  bytes.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
-}
-  function toBase64ShiftJIS(str) {
-  const unicodeArray = Encoding.stringToCode(str);
-  const sjisArray = Encoding.convert(unicodeArray, 'SJIS', 'UNICODE');
-  let bin = '';
-  sjisArray.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
-}
-
-  // Unicode文字列をShift-JISバイト列に変換
-  function unicodeToSjisBytes(str) {
-    // TextEncoderでShift-JISが使えるブラウザ環境では直接変換
-    // 使えない場合はUTF-8にフォールバック
-    try {
-      const encoder = new TextEncoder('shift-jis');
-      // 標準のTextEncoderはUTF-8のみ対応のため、
-      // Blobを使ってShift-JIS変換を行う
-      const bytes = [];
-      for (let i = 0; i < str.length; i++) {
-        const code = str.charCodeAt(i);
-        if (code < 0x80) {
-          bytes.push(code);
-        } else if (code === 0x00A5) {
-          bytes.push(0x5C); // ¥ → \
-        } else if (code === 0x203E) {
-          bytes.push(0x7E); // ‾ → ~
-        } else if (code >= 0xFF61 && code <= 0xFF9F) {
-          // 半角カタカナ
-          bytes.push(code - 0xFF61 + 0xA1);
-        } else if (code >= 0x0391 && code <= 0x0451) {
-          bytes.push(0x3F); // ? (未対応)
-        } else {
-          // 全角文字のShift-JIS変換（主要な文字のみ）
-          const sjis = unicodeCharToSjis(code);
-          if (sjis > 0xFF) {
-            bytes.push((sjis >> 8) & 0xFF);
-            bytes.push(sjis & 0xFF);
-          } else if (sjis > 0) {
-            bytes.push(sjis);
-          } else {
-            bytes.push(0x3F); // ?
-          }
-        }
-      }
-      return bytes;
-    } catch(e) {
-      // フォールバック：UTF-8
-      const utf8bytes = new TextEncoder().encode(str);
-      return Array.from(utf8bytes);
-    }
-  }
-
-  // 主要なUnicode→Shift-JIS変換
-  function unicodeCharToSjis(code) {
-    // ひらがな (U+3041-U+3096)
-    if (code >= 0x3041 && code <= 0x3096) {
-      const offset = code - 0x3041;
-      const row = Math.floor(offset / 94);
-      const col = offset % 94;
-      const sjisRow = row < 62 ? row + 0x20 : row + 0x40;
-      const sjisHigh = Math.floor(sjisRow / 2) + (sjisRow < 0x3F ? 0x70 : 0xB0);
-      const sjisLow = sjisRow % 2 === 0
-        ? col + 0x40 + (col >= 0x3F ? 1 : 0)
-        : col + 0x9E;
-      return (sjisHigh << 8) | sjisLow;
-    }
-    // カタカナ (U+30A1-U+30F6)
-    if (code >= 0x30A1 && code <= 0x30F6) {
-      const offset = code - 0x30A1;
-      const row = Math.floor(offset / 94) + 5;
-      const col = offset % 94;
-      const sjisRow = row < 62 ? row + 0x20 : row + 0x40;
-      const sjisHigh = Math.floor(sjisRow / 2) + (sjisRow < 0x3F ? 0x70 : 0xB0);
-      const sjisLow = sjisRow % 2 === 0
-        ? col + 0x40 + (col >= 0x3F ? 1 : 0)
-        : col + 0x9E;
-      return (sjisHigh << 8) | sjisLow;
-    }
-    return 0;
-  }
-
   function fromBase64(b64) {
     const bin = atob(b64.replace(/\n/g, ''));
     const bytes = new Uint8Array([...bin].map(c => c.charCodeAt(0)));
     return new TextDecoder('utf-8').decode(bytes);
-  }
-
-  function fromBase64ShiftJIS(b64) {
-    const bin = atob(b64.replace(/\n/g, ''));
-    const bytes = new Uint8Array([...bin].map(c => c.charCodeAt(0)));
-    try {
-      return new TextDecoder('shift-jis').decode(bytes);
-    } catch(e) {
-      return new TextDecoder('utf-8').decode(bytes);
-    }
   }
 
   function nowJST() {
@@ -187,42 +87,41 @@ function toBase64Bom(str) {
     }).format(new Date()).replace(/\//g, '-');
   }
 
-  function logFileName() {
+  // 端末番号付きログファイル名: logs/log_YYYY_MM_担当者番号.csv
+  function logFileName(operator) {
     const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `logs/log_${y}_${m}.csv`;
+    const op = (operator || 'unknown').replace(/[^a-zA-Z0-9]/g, '');
+    return `logs/log_${y}_${m}_${op}.csv`;
   }
 
-  // CSV行生成（LF）
-  function csvRow(fields, crlf) {
-    const line = fields.map(f => {
+  function csvRow(fields) {
+    return fields.map(f => {
       const s = String(f ?? '');
       return s.includes(',') || s.includes('"') || s.includes('\n')
         ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(',');
-    return line + (crlf ? '\r\n' : '\n');
+    }).join(',') + '\n';
   }
 
-  const CSV_HEADER_LF   = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\n';
-  const CSV_HEADER_CRLF = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\r\n';
+  const CSV_HEADER = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\n';
 
-  // ─── ① 月次ログ追記（UTF-8・LF）────────────────────────
+  // ─── ① ログ追記（端末別ファイルに即時保存）────────────────
   async function appendLog(entry) {
     if (!hasToken()) throw new Error('GitHub Token が未設定です');
 
     const row = csvRow([
-      nowJST(),
+      entry.scanTime || nowJST(),
       entry.operator    || '',
       entry.destination || '',
       entry.productCode || '',
       entry.slipNo      || '',
       entry.result      || 'OK',
-    ], false);
+    ]);
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        const path = logFileName();
+        const path = logFileName(entry.operator);
         const existing = await getFile(path);
         let newContent, sha;
         if (existing) {
@@ -230,78 +129,43 @@ function toBase64Bom(str) {
           newContent = toBase64(old + row);
           sha = existing.sha;
         } else {
-  newContent = toBase64Bom(CSV_HEADER_CRLF.replace(/^\uFEFF/, '') + rowCRLF);
-  sha = undefined;
-}
+          newContent = toBase64(CSV_HEADER + row);
+          sha = undefined;
+        }
         await putFile(path, newContent, sha, `[log] ${entry.slipNo} ${entry.result}`);
-        _flushQueue();
-
-        
-
+        _flushQueue(entry.operator);
         return { ok: true };
       } catch (e) {
-        if (attempt === 2 || !e.message.includes('409')) {
-          _enqueue(row);
+        if (attempt === 4 || !e.message.includes('409')) {
+          _enqueue(row, entry.operator);
           throw e;
         }
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-      }
-    }
-  }
-
-  // ─── 本日分ログ追記（Shift-JIS・CR+LF・OKのみ）──────────
-  async function appendTodayLog(entry, rowLF) {
-    const TODAY_LOG = 'logs/log.csv';
-    // CR+LF版の行を生成
-    const rowCRLF = csvRow([
-      nowJST(),
-      entry.operator    || '',
-      entry.destination || '',
-      entry.productCode || '',
-      entry.slipNo      || '',
-      entry.result      || 'OK',
-    ], true);
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const existing = await getFile(TODAY_LOG);
-        let newContent, sha;
-  if (existing) {
-  const old = fromBase64(existing.content).replace(/^\uFEFF/, '');
-  newContent = toBase64Bom(old + rowCRLF);
-  sha = existing.sha;
-} else {
-  newContent = toBase64Bom(CSV_HEADER_CRLF + rowCRLF);
-  sha = undefined;
-}
-        await putFile(TODAY_LOG, newContent, sha, `[today-log] ${entry.slipNo}`);
-        return { ok: true };
-      } catch (e) {
-        if (attempt === 2 || !e.message.includes('409')) throw e;
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
       }
     }
   }
 
   // オフラインキュー
-  function _enqueue(row) {
-    const q = JSON.parse(localStorage.getItem(LS_LOG_QUEUE) || '[]');
+  function _enqueue(row, operator) {
+    const key = 'log_queue_' + (operator || 'unknown');
+    const q = JSON.parse(localStorage.getItem(key) || '[]');
     q.push(row);
-    localStorage.setItem(LS_LOG_QUEUE, JSON.stringify(q));
+    localStorage.setItem(key, JSON.stringify(q));
   }
 
-  async function _flushQueue() {
-    const q = JSON.parse(localStorage.getItem(LS_LOG_QUEUE) || '[]');
+  async function _flushQueue(operator) {
+    const key = 'log_queue_' + (operator || 'unknown');
+    const q = JSON.parse(localStorage.getItem(key) || '[]');
     if (!q.length) return;
     try {
-      const path = logFileName();
+      const path = logFileName(operator);
       const existing = await getFile(path);
       const rows = q.join('');
       const newContent = existing
         ? toBase64(fromBase64(existing.content) + rows)
-        : toBase64(CSV_HEADER_LF + rows);
+        : toBase64(CSV_HEADER + rows);
       await putFile(path, newContent, existing?.sha, `[log-flush] ${q.length}件`);
-      localStorage.removeItem(LS_LOG_QUEUE);
+      localStorage.removeItem(key);
     } catch (_) {}
   }
 
