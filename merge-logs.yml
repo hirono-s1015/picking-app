@@ -1,0 +1,127 @@
+name: ログ結合
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '対象日（例：2026-04-28）空白で今日'
+        required: false
+        default: ''
+
+jobs:
+  merge-logs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ログ結合スクリプト実行
+        run: |
+          python3 << 'EOF'
+          import csv
+          import os
+          import glob
+          from datetime import datetime, timezone, timedelta
+
+          JST = timezone(timedelta(hours=9))
+          now = datetime.now(JST)
+
+          # 対象年月を決定
+          date_input = os.environ.get('INPUT_DATE', '').strip()
+          if date_input:
+              try:
+                  target = datetime.strptime(date_input, '%Y-%m-%d').replace(tzinfo=JST)
+              except:
+                  target = now
+          else:
+              target = now
+
+          year  = target.strftime('%Y')
+          month = target.strftime('%m')
+          pattern = f'logs/log_{year}_{month}_*.csv'
+
+          print(f'対象パターン: {pattern}')
+
+          # 全端末ファイルを読み込む
+          all_rows = []
+          files = sorted(glob.glob(pattern))
+          print(f'対象ファイル: {files}')
+
+          for fpath in files:
+              with open(fpath, encoding='utf-8') as f:
+                  reader = csv.reader(f)
+                  rows = list(reader)
+              if len(rows) <= 1:
+                  continue
+              for row in rows[1:]:  # ヘッダースキップ
+                  if row:
+                      all_rows.append(row)
+
+          if not all_rows:
+              print('データがありません')
+              exit(0)
+
+          # 日時でソート
+          def sort_key(row):
+              try:
+                  return row[0]
+              except:
+                  return ''
+
+          all_rows.sort(key=sort_key)
+
+          header = ['日時', '担当者名', '送り先', '商品コード', '発送伝票番号', '結果']
+
+          # log.csv（本日分・OKのみ・上書き）
+          today_str = now.strftime('%Y-%m-%d')
+          ok_rows = [r for r in all_rows if r[0].startswith(today_str) and (len(r) < 6 or r[5] == 'OK')]
+          with open('logs/log.csv', 'w', encoding='utf-8-sig', newline='') as f:
+              writer = csv.writer(f, lineterminator='\r\n')
+              writer.writerow(header)
+              writer.writerows(ok_rows)
+          print(f'log.csv: {len(ok_rows)}件（本日OKのみ）')
+
+          # log_YYYY_MM.csv（月次・OK+NG全部・追記）
+          monthly_path = f'logs/log_{year}_{month}.csv'
+          existing_rows = []
+          if os.path.exists(monthly_path):
+              with open(monthly_path, encoding='utf-8') as f:
+                  reader = csv.reader(f)
+                  rows = list(reader)
+              existing_rows = rows[1:] if len(rows) > 1 else []
+
+          # 重複除去（日時+担当者名+発送伝票番号をキーに）
+          existing_keys = set()
+          for r in existing_rows:
+              if len(r) >= 5:
+                  existing_keys.add(r[0] + '_' + r[1] + '_' + r[4])
+
+          new_rows = []
+          for r in all_rows:
+              if len(r) >= 5:
+                  key = r[0] + '_' + r[1] + '_' + r[4]
+                  if key not in existing_keys:
+                      new_rows.append(r)
+                      existing_keys.add(key)
+
+          merged = existing_rows + new_rows
+          merged.sort(key=sort_key)
+
+          with open(monthly_path, 'w', encoding='utf-8', newline='') as f:
+              writer = csv.writer(f)
+              writer.writerow(header)
+              writer.writerows(merged)
+          print(f'{monthly_path}: {len(merged)}件（月次全部）')
+
+          EOF
+        env:
+          INPUT_DATE: ${{ github.event.inputs.date }}
+
+      - name: コミット＆プッシュ
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/log.csv logs/log_*.csv
+          git diff --staged --quiet || git commit -m "[today-log] $(date +'%Y-%m-%d') 結合完了"
+          git pull --rebase origin main
+          git push
