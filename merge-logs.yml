@@ -6,7 +6,6 @@ on:
         description: '対象日（例：2026-04-28）空白で今日'
         required: false
         default: ''
-
 jobs:
   merge-logs:
     runs-on: ubuntu-latest
@@ -14,114 +13,119 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
+      # 担当者別ログを月次にまとめ、本日分 log.csv を作る。
+      # 今月を含めて3か月を残す（9月なら7・8・9月）。
+      # 残す月の先月以前：月次に全行入ったのを確認してから担当者別ファイルを削除。
+      # それより古い月：月次ファイルも含めて削除。
       - name: ログ結合スクリプト実行
         run: |
-          python3 << 'EOF'
+          python3 << 'PYEOF'
           import csv
           import os
+          import re
           import glob
+          from collections import Counter
           from datetime import datetime, timezone, timedelta
-
+          
           JST = timezone(timedelta(hours=9))
           now = datetime.now(JST)
-
-          # 対象年月を決定
+          HEADER = ['日時', '担当者名', '送り先', '商品コード', '発送伝票番号', '結果']
+          
+          # 対象月（空白なら今月）
           date_input = os.environ.get('INPUT_DATE', '').strip()
-          if date_input:
-              try:
-                  target = datetime.strptime(date_input, '%Y-%m-%d').replace(tzinfo=JST)
-              except:
-                  target = now
-          else:
+          try:
+              target = datetime.strptime(date_input, '%Y-%m-%d').replace(tzinfo=JST) if date_input else now
+          except ValueError:
               target = now
-
-          year  = target.strftime('%Y')
-          month = target.strftime('%m')
-          pattern = f'logs/log_{year}_{month}_*.csv'
-
-          print(f'対象パターン: {pattern}')
-
-          # 全端末ファイルを読み込む
-          all_rows = []
-          files = sorted(glob.glob(pattern))
-          print(f'対象ファイル: {files}')
-
-          for fpath in files:
-              with open(fpath, encoding='utf-8') as f:
-                  reader = csv.reader(f)
-                  rows = list(reader)
-              if len(rows) <= 1:
-                  continue
-              for row in rows[1:]:  # ヘッダースキップ
-                  if row:
-                      all_rows.append(row)
-
-          if not all_rows:
-              print('データがありません')
-              exit(0)
-
-          # 日時でソート
-          def sort_key(row):
-              try:
-                  return row[0]
-              except:
-                  return ''
-
-          all_rows.sort(key=sort_key)
-
-          header = ['日時', '担当者名', '送り先', '商品コード', '発送伝票番号', '結果']
-
-          # log.csv（本日分・OKのみ・上書き）
-          today_str = now.strftime('%Y-%m-%d')
-          ok_rows = [r for r in all_rows if r[0].startswith(today_str) and (len(r) < 6 or r[5] == 'OK')]
+          
+          
+          def read_rows(path):
+              with open(path, encoding='utf-8-sig', newline='') as f:
+                  rows = list(csv.reader(f))
+              return [r for r in rows[1:] if r]
+          
+          
+          def merge_month(y, m):
+              """担当者別ファイルを月次ファイル logs/log_YYYY_MM.csv にまとめる。
+              同じ行が何回あるかも数えて合わせる（同梱の同じ商品が消えないように）。"""
+              files = sorted(glob.glob(f'logs/log_{y}_{m}_*.csv'))
+              monthly = f'logs/log_{y}_{m}.csv'
+              existing = read_rows(monthly) if os.path.exists(monthly) else []
+              need = Counter()
+              for f in files:
+                  need += Counter(tuple(r) for r in read_rows(f))
+              have = Counter(tuple(r) for r in existing)
+              merged = list(existing)
+              for row, n in need.items():
+                  for _ in range(n - have[row]):
+                      merged.append(list(row))
+              merged.sort(key=lambda r: r[0] if r else '', reverse=True)   # 新しい順
+              with open(monthly, 'w', encoding='utf-8', newline='') as f:
+                  w = csv.writer(f)
+                  w.writerow(HEADER)
+                  w.writerows(merged)
+              print(f'{monthly}: {len(merged)}件（担当者別 {len(files)}ファイル）')
+              return files, need
+          
+          
+          # ── 1. 対象月をまとめ、本日分 log.csv を作る ──────────────
+          ty, tm = target.strftime('%Y'), target.strftime('%m')
+          files, _ = merge_month(ty, tm)
+          today = now.strftime('%Y-%m-%d')
+          today_ok = []
+          for f in files:
+              today_ok += [r for r in read_rows(f) if r[0].startswith(today) and (len(r) < 6 or r[5] == 'OK')]
+          today_ok.sort(key=lambda r: r[0], reverse=True)   # 新しい順
           with open('logs/log.csv', 'w', encoding='utf-8-sig', newline='') as f:
-              writer = csv.writer(f, lineterminator='\r\n')
-              writer.writerow(header)
-              writer.writerows(ok_rows)
-          print(f'log.csv: {len(ok_rows)}件（本日OKのみ）')
-
-          # log_YYYY_MM.csv（月次・OK+NG全部・追記）
-          monthly_path = f'logs/log_{year}_{month}.csv'
-          existing_rows = []
-          if os.path.exists(monthly_path):
-              with open(monthly_path, encoding='utf-8') as f:
-                  reader = csv.reader(f)
-                  rows = list(reader)
-              existing_rows = rows[1:] if len(rows) > 1 else []
-
-          # 重複除去（日時+担当者名+発送伝票番号をキーに）
-          existing_keys = set()
-          for r in existing_rows:
-              if len(r) >= 5:
-                  existing_keys.add(r[0] + '_' + r[1] + '_' + r[4])
-
-          new_rows = []
-          for r in all_rows:
-              if len(r) >= 5:
-                  key = r[0] + '_' + r[1] + '_' + r[4]
-                  if key not in existing_keys:
-                      new_rows.append(r)
-                      existing_keys.add(key)
-
-          merged = existing_rows + new_rows
-          merged.sort(key=sort_key)
-
-          with open(monthly_path, 'w', encoding='utf-8', newline='') as f:
-              writer = csv.writer(f)
-              writer.writerow(header)
-              writer.writerows(merged)
-          print(f'{monthly_path}: {len(merged)}件（月次全部）')
-
-          EOF
+              w = csv.writer(f, lineterminator='\r\n')
+              w.writerow(HEADER)
+              w.writerows(today_ok)
+          print(f'log.csv: {len(today_ok)}件（本日OKのみ）')
+          
+          # ── 2. 古いログの片付け ──────────────────────────────────
+          #   今月を含めて KEEP_MONTHS か月を残す（3 なら 9月に 7・8・9月が残る）
+          #   それより古い月 → 月次ファイルも担当者別ファイルも削除
+          #   残す月の先月以前 → 月次にまとめ直し、全行入ったのを確認してから担当者別ファイルを削除
+          KEEP_MONTHS = 3
+          months = set()
+          for p in glob.glob('logs/log_*.csv'):
+              mt = re.match(r'logs/log_(\d{4})_(\d{2})(_.+)?\.csv$', p)
+              if mt:
+                  months.add((mt.group(1), mt.group(2)))
+          
+          def months_ago(y, m):
+              return (now.year * 12 + now.month) - (int(y) * 12 + int(m))
+          
+          for y, m in sorted(months):
+              age = months_ago(y, m)
+              if age <= 0:
+                  continue
+              if age >= KEEP_MONTHS:
+                  old = glob.glob(f'logs/log_{y}_{m}.csv') + glob.glob(f'logs/log_{y}_{m}_*.csv')
+                  for f in old:
+                      os.remove(f)
+                  print(f'{y}_{m}: 保存期間（今月を含め{KEEP_MONTHS}か月）外のため {len(old)}ファイルを削除')
+                  continue
+              if not glob.glob(f'logs/log_{y}_{m}_*.csv'):
+                  continue   # 担当者別ファイルが残っていない月は何もしない
+              files, need = merge_month(y, m)
+              # 書き出した月次ファイルを読み直し、全行入っているか確認してから消す
+              have = Counter(tuple(r) for r in read_rows(f'logs/log_{y}_{m}.csv'))
+              lost = sum(n - have[row] for row, n in need.items() if have[row] < n)
+              if lost:
+                  print(f'⚠ {y}_{m}: {lost}行が月次に入っていないため削除しません')
+                  continue
+              for f in files:
+                  os.remove(f)
+              print(f'{y}_{m}: 担当者別 {len(files)}ファイルを削除')
+          PYEOF
         env:
           INPUT_DATE: ${{ github.event.inputs.date }}
-
       - name: コミット＆プッシュ
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add logs/log.csv logs/log_*.csv
-          git diff --staged --quiet || git commit -m "[today-log] $(date +'%Y-%m-%d') 結合完了"
+          git add -A logs
+          git diff --staged --quiet || git commit -m "[today-log] $(TZ=Asia/Tokyo date +'%Y-%m-%d') 結合完了"
           git pull --rebase origin main
           git push
