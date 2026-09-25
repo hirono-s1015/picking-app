@@ -801,6 +801,15 @@ function showItem(item, idx, total_items) {
 }
 
 // ===== SCAN LOGIC =====
+function jstNow() {
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(new Date()).replace(/\//g, '-');
+}
+
 function processScan(val) {
   if (!val) return;
   isErr=false; setClear(false);
@@ -857,6 +866,7 @@ function processScan(val) {
     var matchOk = (val === curItem.code) || (hasJan && val === curItem.jan);
     if (matchOk) {
       stopLocSpeech();
+      curItem.scanTime = jstNow();   // この商品をOKにした時刻を記録
       cOk++;
       addLog('ok', curItem.name + ' / ' + curItem.code);
       updateCounters();
@@ -885,14 +895,7 @@ function processScan(val) {
           }).catch(function(e) {
             console.warn('[done] 保存失敗:', e.message);
           });
-        // スキャン時刻を記録して即時送信
-          var scanTime = new Intl.DateTimeFormat('ja-JP', {
-            timeZone: 'Asia/Tokyo',
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit',
-            hour12: false,
-          }).format(new Date()).replace(/\//g, '-');
-
+        // 各商品をOKにした時刻でログを保存
           allItems.forEach(function(item) {
             GitHubSync.appendLog({
               operator:    operator,
@@ -900,7 +903,7 @@ function processScan(val) {
               productCode: item.code,
               slipNo:      completedSlip,
               result:      'OK',
-              scanTime:    scanTime
+              scanTime:    item.scanTime || jstNow()
             }).catch(function(e) {
               console.warn('[log] 保存失敗:', e.message);
             });

@@ -88,13 +88,15 @@ const GitHubSync = (() => {
     }).format(new Date()).replace(/\//g, '-');
   }
 
-  // 端末番号付きログファイル名: logs/log_YYYY_MM_担当者番号.csv
+  // 日ごと・担当者別ログファイル名: logs/log_YYYY_MM_DD_担当者番号.csv
+  // （月ごとだと月末にファイルが大きくなり、保存のたびの通信が重くなるため日ごとに分ける）
   function logFileName(operator) {
     const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
     const op = (operator || 'unknown').replace(/[^a-zA-Z0-9]/g, '');
-    return `logs/log_${y}_${m}_${op}.csv`;
+    return `logs/log_${y}_${m}_${dd}_${op}.csv`;
   }
 
   function csvRow(fields) {
@@ -108,7 +110,15 @@ const GitHubSync = (() => {
   const CSV_HEADER = '日時,担当者名,送り先,商品コード,発送伝票番号,結果\n';
 
   // ─── ① ログ追記（端末別ファイルに即時保存）────────────────
-  async function appendLog(entry) {
+  // 同じ端末からの保存は1件ずつ順番に行う（同梱で同時に保存して競合するのを防ぐ）
+  let _logChain = Promise.resolve();
+  function appendLog(entry) {
+    const p = _logChain.then(() => _appendLogNow(entry));
+    _logChain = p.catch(() => {});
+    return p;
+  }
+
+  async function _appendLogNow(entry) {
     if (!hasToken()) throw new Error('GitHub Token が未設定です');
 
     const row = csvRow([
