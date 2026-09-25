@@ -16,6 +16,7 @@ const GitHubSync = (() => {
   const LS_TOKEN     = 'gh_pat';
   const LS_DONE      = 'done_local_cache';
   const LS_LOG_QUEUE = 'log_queue';
+  const DONE_KEEP    = 10000;   // done.json に残す完了伝票の件数
 
   function init() {
     CONFIG.token = localStorage.getItem(LS_TOKEN) || '';
@@ -196,6 +197,8 @@ const GitHubSync = (() => {
         if (file) { list = JSON.parse(fromBase64(file.content)); sha = file.sha; }
         if (list.includes(slipNo)) return { ok: true, already: true };
         list.push(slipNo);
+        // 直近 DONE_KEEP 件だけ残す（1MB を超えると GitHub API で読めなくなるため）
+        list = list.filter(Boolean).slice(-DONE_KEEP);
         const newContent = toBase64(JSON.stringify(list, null, 2) + '\n');
         await putFile('done.json', newContent, sha, `[done] ${slipNo}`);
         localStorage.setItem(LS_DONE, JSON.stringify(list));
